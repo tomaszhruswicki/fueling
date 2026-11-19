@@ -2,7 +2,7 @@
 const LS = "fueling.v1", LSK = "fueling.key";
 
 export const MODES = { normal: "Normalnie", hp: "High performance", tired: "Zmęczenie", sick: "Choroba" };
-export const DEF = { meals: 4, minMeal: null, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 700, cap: 150, hpCarb: 1.0 };
+export const DEF = { meals: 4, minMeal: null, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, cutLevel: "light", weekly: 700, cap: 150, hpCarb: 1.0 };
 export const normOv = ov => ({ off: {}, skip: {}, time: {}, prio: {}, mealTimes: {}, ...(ov || {}) });
 
 export const S = {
@@ -18,7 +18,10 @@ export const getKey = () => { try { return localStorage.getItem(LSK) || ""; } ca
 export const setKey = k => { try { k ? localStorage.setItem(LSK, k) : localStorage.removeItem(LSK); } catch (e) {} };
 
 export function applyUserData(x) {
-  S.settings = { ...DEF, ...(x.settings || {}) }; S.modes = x.modes || []; S.ov = normOv(x.ov);
+  const old = x.settings || {};
+  // Ustawienia sprzed poziomów w % masy: poziomy 700/150, 1050/250, 1750/400 albo własne wartości.
+  const lvl = old.cutLevel || (old.weekly == null ? "light" : ({ "700|150": "light", "1050|250": "mid", "1750|400": "strong" })[old.weekly + "|" + old.cap] || "custom");
+  S.settings = { ...DEF, ...old, cutLevel: lvl }; S.modes = x.modes || []; S.ov = normOv(x.ov);
 }
 export function load() {
   try {

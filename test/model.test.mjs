@@ -11,6 +11,7 @@ const ride = (id, steps, extra = {}) => ({ id, type: "Ride", category: "WORKOUT"
 const sess = (ev, start, prio = false) => ({ ...M.analyzeSession(ev, { ...cfg, prio }), start, off: false });
 const plan = (sessions, extra = {}) => M.planDay({ sessions }, { settings: V, times: null, ...extra });
 const sum = (list, k) => list.reduce((a, x) => a + x[k], 0);
+const minCut = (p, m) => m.kind !== "main" ? M.K.SNACK_MIN : m.code === "L" ? Math.max(300, 0.7 * p.minMain) : p.minMain;
 
 test("kJ z kroków: moc × czas, z powtórzeniami", () => {
   const ev = ride(1, [step(10, 60), { reps: 4, steps: [step(8, 100), step(2, 50)] }, step(10, 50)]);
@@ -56,10 +57,10 @@ test("plan dnia: suma makro zgodna z celem, węgle w zakresie kodów", () => {
   low.forEach(m => assert.ok(m.c < pre.c));
 });
 
-test("deficyt: tylko posiłki LOW, przed treningiem i regeneracja bez zmian, nic poniżej minimum", () => {
+test("deficyt: posiłki LOW i MEDIUM, przed treningiem i regeneracja bez zmian, nic poniżej minimum cięcia", () => {
   const rest = plan([], { deficit: 250 });
   assert.ok(rest.def > 0 && rest.def <= 250.5, "dzień wolny: deficyt wchodzi");
-  rest.meals.forEach(m => assert.ok(m.kcal >= (m.kind === "main" ? rest.minMain : M.K.SNACK_MIN) - 1));
+  rest.meals.forEach(m => assert.ok(m.kcal >= minCut(rest, m) - 1));
   const s = sess(ride(12, [step(75, 70)]), 12 * 60);
   const a = plan([s]), b = plan([s], { deficit: 250 });
   assert.ok(b.def <= 250.5);
@@ -67,7 +68,7 @@ test("deficyt: tylko posiłki LOW, przed treningiem i regeneracja bez zmian, nic
     const x = a.meals.find(m => m.role === role), y = b.meals.find(m => m.role === role);
     if (x) assert.ok(Math.abs(x.c - y.c) < 0.01, role + " zachowuje węgle");
   }
-  b.meals.filter(m => m.cut).forEach(m => { assert.equal(m.code, "L"); assert.ok(m.kcal >= (m.kind === "main" ? b.minMain : M.K.SNACK_MIN) - 1); });
+  b.meals.filter(m => m.cut).forEach(m => { assert.notEqual(m.code, "H"); assert.ok(m.kcal >= minCut(b, m) - 1); });
 });
 
 test("minimum posiłku: żaden posiłek główny poniżej minimum", () => {
@@ -151,9 +152,6 @@ test("trend masy: regresja liniowa", () => {
   assert.ok(Math.abs(M.weightSlope(pts) + 0.05) < 0.03);
 });
 
-// Znane ograniczenie (19.11.2026): w dzień treningowy posiłki LOW mają stałe 0,4 g/kg węgli i są dobijane do minimum
-// posiłku, więc deficyt (tylko z LOW, nie poniżej minimum) wynosi zwykle 0. Decyzja w roadmapie.
-test.todo("deficyt w dzień treningowy przy domyślnym minimum posiłku");
 
 test("dopasowanie aktywności: tylko paired_event_id z Intervals", () => {
   const plan18 = [{ id: "10", type: "Ride", start: 18 * 60 }];
@@ -173,4 +171,66 @@ test("przeliczenie: posiłek, którego nie było w planie, a jego pora minęła,
   const pastK = sum(L.meals.filter(m => m.past), "kcal"), pastA = sum(a.meals.filter(m => m.t <= 17 * 60), "kcal");
   assert.ok(Math.abs(pastK - pastA) < 1, "minione = to, co było w planie");
   assert.ok(sum(L.meals.filter(m => !m.past), "kcal") > sum(a.meals.filter(m => m.t > 17 * 60), "kcal"), "dodatkowa energia trafia do reszty dnia");
+});
+
+// ---------- Deficyt w rytmie treningu (spec 2026-11-19) ----------
+const gym = (id) => ({ id, type: "WeightTraining", category: "WORKOUT", name: "Siłownia", moving_time: 3600 });
+const run = (id, extra = {}) => ({ id, type: "Run", category: "WORKOUT", name: "Bieg", moving_time: 3600, ...extra });
+
+test("intensywność dnia", () => {
+  assert.equal(M.dayIntensity([]), "rest");
+  assert.equal(M.dayIntensity([sess(ride(40, [step(60, 60)]), 600)]), "low");
+  assert.equal(M.dayIntensity([sess(ride(41, [step(90, 65)]), 600)]), "mid");
+  assert.equal(M.dayIntensity([{ ...M.analyzeSession(gym(42), cfg), start: 600 }]), "mid");
+  const hard = sess(ride(43, [step(15, 55), { reps: 4, steps: [step(5, 110), step(3, 50)] }, step(15, 55)]), 1080);
+  assert.equal(M.dayIntensity([hard]), "high");
+  assert.equal(M.dayIntensity([sess(ride(44, [step(60, 60)]), 420), hard]), "high");
+});
+
+test("bieg zaplanowany: dystans × masa, bez dystansu prędkość z historii", () => {
+  const h = 1, net = km => 70 * km - M.K.MAINT_KCAL_H * h;
+  assert.ok(Math.abs(M.analyzeSession(run(50, { distance: 10000 }), { ...cfg, mass: 70 }).kcal - net(10)) < 0.01);
+  assert.ok(Math.abs(M.analyzeSession(run(51), { ...cfg, mass: 70, runSpeed: 12 }).kcal - net(12)) < 0.01);
+  assert.ok(Math.abs(M.analyzeSession(run(52), { ...cfg, mass: 70 }).kcal - net(10)) < 0.01);
+});
+
+test("deficyt w dzień luźny: wchodzi, maks. 30% posiłku, regeneracja i posiłek przed bez zmian", () => {
+  const s = sess(ride(60, [step(60, 60)]), 17 * 60);
+  const a = plan([s]), b = plan([s], { deficit: 200 });
+  assert.ok(b.def > 150, "deficyt " + b.def);
+  b.meals.forEach((m, i) => {
+    const o = a.meals[i];
+    if (["pre", "presnack", "recovery"].includes(m.role) || m.code === "H") assert.ok(Math.abs(o.kcal - m.kcal) < 0.5, m.name + " bez zmian");
+    assert.ok(m.kcal >= 0.7 * o.kcal - 0.5, m.name + " maks. 30%");
+    if (m.cut) assert.ok(m.kcal >= minCut(b, m) - 1, m.name + " nad minimum");
+  });
+});
+
+test("dwa posiłki przed mocnym treningiem bez cięcia", () => {
+  const hard = sess(ride(61, [step(15, 55), { reps: 4, steps: [step(5, 110), step(3, 50)] }, step(15, 55)]), 18 * 60);
+  const a = plan([hard]), b = plan([hard], { deficit: 300 });
+  const before = a.meals.filter(m => m.t < hard.start && m.role !== "recovery").slice(-2);
+  before.forEach(o => { const m = b.meals.find(x => x.t === o.t); assert.ok(Math.abs(o.kcal - m.kcal) < 0.5, o.name); });
+});
+
+test("A+: tylko ostatni posiłek, gdy min. 4 h po regeneracji", () => {
+  const hard = sess(ride(62, [step(15, 55), { reps: 4, steps: [step(5, 110), step(3, 50)] }, step(15, 55)]), 7 * 60);
+  const a = plan([hard]), b = plan([hard], { deficit: 150, aplus: true });
+  const last = b.meals[b.meals.length - 1];
+  assert.ok(last.cut && b.def > 50);
+  b.meals.slice(0, -1).forEach((m, i) => assert.ok(Math.abs(a.meals[i].kcal - m.kcal) < 0.5));
+  const eve = sess(ride(63, [step(60, 90)]), 18 * 60);
+  assert.equal(plan([eve], { deficit: 150, aplus: true }).def, 0, "trening wieczorem: brak miejsca na A+");
+});
+
+test("próg dostępności energii ogranicza deficyt", () => {
+  const p = plan([], { deficit: 400, eaMin: V.base - 100 });
+  assert.ok(p.def <= 100.5); assert.equal(p.cutLimit, "ea");
+});
+
+test("przeliczenie: kafelki = cel dnia, brakujące makro bez kolejnych posiłków", () => {
+  const { a, b } = liveCase(2400, 23 * 60);
+  const L = M.liveAdjust(a, b, 23 * 60, V.mass);
+  assert.ok(Math.abs(L.cT - b.cT) < 0.01 && Math.abs(L.pT - b.pT) < 0.01 && Math.abs(L.fT - b.fT) < 0.01);
+  assert.ok(L.live.missing.kcal > 0 && L.live.missing.c > 0);
 });

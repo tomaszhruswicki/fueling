@@ -63,7 +63,7 @@ function diffEvents(a, b) {
   return out.length ? { at: Date.now(), list: out.slice(0, 8), more: Math.max(0, out.length - 8) } : null;
 }
 // Z aktywności zostawiamy tylko pola potrzebne do obliczeń (mniej danych w pamięci urządzenia).
-const ACT_KEYS = ["id", "start_date_local", "type", "name", "moving_time", "elapsed_time", "icu_joules", "icu_average_watts", "icu_weighted_avg_watts", "icu_intensity", "calories", "carbs_ingested", "trainer", "paired_event_id"];
+const ACT_KEYS = ["id", "start_date_local", "type", "name", "moving_time", "elapsed_time", "icu_joules", "icu_average_watts", "icu_weighted_avg_watts", "icu_intensity", "calories", "carbs_ingested", "trainer", "paired_event_id", "distance"];
 const slimAct = a => Object.fromEntries(ACT_KEYS.filter(k => a[k] != null).map(k => [k, a[k]]));
 
 // Pobiera profil, plan (−21…+42 dni), wellness (120 dni) i wykonane aktywności (29 dni). Zwraca { restored }.

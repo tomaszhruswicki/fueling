@@ -12,7 +12,8 @@ Użytkownik: Tomasz (od 19.11.2026). Udostępnienie zawodnikom movementcare to o
 - Repozytorium jest publiczne: w kodzie i dokumentach nie ma kluczy API, ID zawodników, danych zdrowotnych ani danych testowych z Intervals. Dane testowe trzymaj poza repozytorium (scratchpad, pliki `_seed*` są w `.gitignore`).
 - Żadnych zewnętrznych skryptów, bibliotek ani analityki. CSP w `index.html` pozwala tylko na `self` i `intervals.icu`.
 - Energia i węgle z rozpisanych kroków treningu (moc × czas), nie z samego IF.
-- Deficyt tylko z posiłków LOW. Nigdy przed dniem jakości, w dniu startu, ładowania, HP i choroby. Nie schodzi poniżej minimum dnia (RMR × 1,15) ani minimum posiłku.
+- Deficyt w rytmie treningu: udział dnia luźny 100%, średni 60%, wolny 60%, mocny 0 (A+: ostatni posiłek min. 4 h po regeneracji). Nigdy w dzień przed mocną jednostką, w dniu startu, ładowania, HP i choroby. Cięcie z posiłków LOW i MEDIUM, maks. 30% posiłku; nigdy z posiłku przed treningiem, regeneracji, posiłków HIGH ani dwóch posiłków przed mocną jednostką.
+- Progi: dzień wolny nie schodzi poniżej RMR × 1,15; jedzenie minus trening co najmniej 30 kcal/kg masy beztłuszczowej; posiłek nie schodzi poniżej minimum cięcia.
 - Posiłek przed treningiem i regeneracja zachowują swoje węgle przy każdej korekcie.
 - To narzędzie wspierające planowanie, nie porada dietetyczna. Szacunki mają błąd ok. 10–15%.
 
@@ -34,7 +35,7 @@ GitHub Pages z gałęzi `main` (repo `tomaszhruswicki/fueling`, publiczne). DNS:
 - Działa: Dzień (timeline, posiłki z makro i płynami, trening z podażą w blokach 30 min, przeliczenie reszty dnia po wykonanym treningu), Tydzień, Dziennik (waga, kcal i makro do wellness, tylko zmienione pola, kontrola wiarygodności), Ustawienia (utrzymanie z jedną kalibracją z wykonania, posiłki i pory, deficyt, tryby z historią, priorytet), wysyłanie planu do Intervals.
 - Odświeżanie: przy otwarciu, po powrocie do aplikacji (po 2 min), co 5 min, a co 2 min, gdy dzisiejszy trening powinien się już skończyć, a aktywności jeszcze nie ma.
 - Sprawdzone lokalnie w widoku telefonu na danych syntetycznych. Na iPhonie z prawdziwym kluczem jeszcze nie, w tym pola aktywności z `/activities` (`icu_joules`, `carbs_ingested`, `paired_event_id`).
-- Znane ograniczenie: w dzień treningowy deficyt zwykle wynosi 0 (roadmapa A7).
+- Deficyt w rytmie treningu (A+), kroki dnia w utrzymaniu, bieg z dystansu (19.11 w nocy). Do obserwacji: ile deficytu realnie wchodzi (roadmapa A7).
 
 ## Dokumenty
 

@@ -11,7 +11,7 @@ const shown = v => v != null && v !== "" ? String(v).replace(".", ",") : "";
 let base = { date: null, vals: {} };
 
 const wellnessOn = d => (S.cache.wellness || []).find(x => x.id === d) || {};
-function planOn(date, R) { return (R && R.show.find(x => x.date === date)) || computeRange(date, 1).show[0]; }
+function planOn(date, R) { return (R && R.show.find(x => x.date === date)) || computeRange(mondayOf(date), 7).show.find(x => x.date === date); }
 
 export function renderLog(R) {
   if (!S.logDate) S.logDate = todayISO();

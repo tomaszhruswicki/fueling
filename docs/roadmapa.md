@@ -4,13 +4,13 @@ Stan na 19.11.2026. Szacunki to czas pracy z Claude, bez testu na telefonie (ok.
 
 ## Zrobione 19.11.2026
 
-A1, A2, A3, A4, A5, B1, B2, B3, C1. Szczegóły w `docs/decyzje.md`.
+A1, A2, A3, A4, A5, A7, B1, B2, B3, B4 (bieg, spacery), C1. Szczegóły w `docs/decyzje.md`.
 
 ## Proponowana kolejność
 
 1. E: test na iPhonie z prawdziwym kluczem, w tym przeliczenie po treningu na prawdziwej aktywności (15 min).
-2. A7: decyzja o deficycie w dni treningowe (30 min rozmowy, 30 min kodu).
-3. B4: wydatek siłowni i biegu przez masę ciała albo z kalorii aktywności (30 min).
+2. Obserwacja deficytu przez 2 tygodnie: ile wchodzi realnie względem poziomu.
+3. C3: test potu (1 h).
 4. C2: plan a wykonanie w widoku Tydzień (1 h).
 
 Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
@@ -22,13 +22,13 @@ Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 3. ~~Dwie różne kalibracje.~~ Zrobione: jedna funkcja w `calc.js` (28 dni, trend masy z regresji liniowej).
 4. ~~Kalibracja odejmuje trening z planu.~~ Zrobione: z wykonanych aktywności z 29 dni; bez nich z planu.
 5. ~~Ręczne podbijanie wersji w `sw.js`.~~ Zrobione: `tools/release.sh`.
-7. **Deficyt w dzień treningowy wynosi zwykle 0.** Posiłki LOW mają stałe 0,4 g/kg węgli i są dobijane do minimum posiłku, a deficyt bierze tylko z LOW i nie schodzi poniżej minimum. Efekt: deficyt działa praktycznie tylko w dni wolne. Opcje: brać deficyt także z tłuszczu posiłków MEDIUM albo liczyć minimum posiłku LOW niżej. Decyzja Tomasza. 30 min po decyzji.
+7. ~~Deficyt w dzień treningowy wynosi zwykle 0.~~ Zrobione: deficyt w rytmie treningu (A+). Do obserwacji: w tygodniu z dwoma mocnymi treningami realnie wchodzi ok. 1300 kcal, bo ograniczają posiłki (30%, minimum) i dni przed mocnym są na zero. Poziomy umiarkowany i mocny mogą być nieosiągalne; dźwignie: zero tylko wieczorem w dzień przed mocnym, wyższy limit cięcia posiłku.
 8. **Pola aktywności niesprawdzone na prawdziwym koncie.** Przeliczenie używa `icu_joules`, `calories`, `carbs_ingested`, `paired_event_id` z `/activities`. Dopasowanie do planu wyłącznie po `paired_event_id`, więc sprawdzić, czy Intervals paruje treningi z Garmina/Wahoo automatycznie. Aktywności ze Stravy przychodzą przez API bez danych i są pomijane. Sprawdzić przy teście E.
 6. **Kopia ustawień nadpisuje całość** (wygrywa nowszy zapis). Zmiany na dwóch urządzeniach w krótkim odstępie mogą się zgubić. Przy jednym użytkowniku do przyjęcia. Scalanie per pole dopiero przy zawodnikach. 1 h.
 
 ## B. Porządek kodu
 
-1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 28 testów, `node --test`).
+1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 35 testów, `node --test`).
 2. ~~Podział `app.js`~~ Zrobione: `util`, `store`, `intervals`, `calc`, `log`, `settings`, `app`.
 3. ~~Stałe modelu w jednym miejscu~~ Zrobione: `K` w `model.js`. Krzywe udziału węglowodanów zostają przy funkcjach.
 4. **Wydatek siłowni i biegu stały** (280 kcal/h, 10 kcal/min) niezależnie od masy. Przeliczać przez masę ciała albo brać kJ/kcal z wykonanej aktywności. 30 min.

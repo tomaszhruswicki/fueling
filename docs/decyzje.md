@@ -2,6 +2,16 @@
 
 Najnowsze na górze. Każda z datą i powodem, żeby nie otwierać ich ponownie bez nowego argumentu.
 
+## 19.11.2026 (noc)
+
+- **Deficyt w rytmie treningu (A+)**, spec `docs/superpowers/specs/2026-11-19-deficyt-kroki-design.md`. Udziały Tomasza: luźny 100%, średni 60%, wolny 60% (dzień regeneracji), mocny 0. Rozważone okna między treningami (B): wierniejsze, ale trudniejsze do sprawdzenia; badania nie rozstrzygają między A i B. A+ dodaje ostatni posiłek dnia mocnego, gdy jest 4 h po regeneracji i jutro nie ma mocnej jednostki.
+- **Rozkład po trochu z kilku posiłków** (maks. 30%), regeneracja po każdym treningu bez cięcia (Torstveit 2018, Fahrenholtz 2017: długie godziny w deficycie i duże jednorazowe deficyty wiążą się z obniżonym RMR).
+- **Próg dostępności energii 30 kcal/kg masy beztłuszczowej** w dni treningowe; minimum RMR × 1,15 tylko w dni wolne. Bez % tłuszczu masa beztłuszczowa = 85% masy.
+- **Poziomy w % masy na tydzień** (0,25/0,5/0,7%; Garthe 2011). Lekki i własny to sufit, umiarkowany i mocny przenoszą resztę na dni wolne i luźne do niedzieli.
+- **Kroki dnia w utrzymaniu**, spacery i wędrówki nie są treningiem. Powód: wędrówka 19.11 liczyła się podwójnie.
+- **Bieg z dystansu** (1 kcal/kg/km), bez dystansu z tempa z biegów z 28 dni. Tomasz odrzucił stałą i samą masę × czas.
+- **Klasyfikacja intensywności bez zmian** (minuty ≥ 88% FTP, VO2, kJ, długość) zamiast IF z artefaktu: Tomasz uznał obecną za lepszą.
+
 ## 19.11.2026 (wieczór)
 
 - **Dopasowanie aktywności do planu tylko po parowaniu w Intervals** (`paired_event_id`). Wcześniej także ten sam rodzaj sportu tego dnia, przez co poranny dojazd rowerem „wykonywał” wieczorny trening i obcinał kolację. Okno czasowe 3 h odrzucone: Intervals paruje wystarczająco dobrze. Niesparowany trening przy aktywności tego samego sportu dostaje podpowiedź (sparuj albo odznacz „robię”), bo do tego czasu liczą się oba.

@@ -17,7 +17,8 @@ Aplikacja webowa (PWA) do planowania żywienia pod trening na podstawie planu z 
 - Tryby: Normalnie, High performance, Zmęczenie, Choroba. Ustawiane na dzień albo od dnia do odwołania, z historią.
 - Priorytet treningu lub startu: ładowanie węglowodanami 1–2 dni przed, posiłek przed startem min. 2 g/kg, pełna podaż w trakcie.
 - Po wgraniu aktywności reszta dnia przelicza się z wykonania (jak Hexis Live).
-- Deficyt tylko z posiłków LOW. Nigdy przed dniem jakości, w dniu startu, ładowania, HP i choroby.
+- Deficyt w rytmie treningu: wchodzi w dni luźne, średnie i wolne, nigdy przed mocną jednostką ani w dniu startu, ładowania, HP i choroby. Próg dostępności energii 30 kcal/kg masy beztłuszczowej.
+- Kroki dnia w utrzymaniu (spacery i wędrówki nie są treningiem). Bieg z dystansu i masy ciała.
 
 Szczegóły i źródła: `index.html`, sekcja „Metoda i ograniczenia”. Szacunki mają błąd ok. 10–15%. To narzędzie wspierające planowanie, nie porada dietetyczna ani medyczna.
 
