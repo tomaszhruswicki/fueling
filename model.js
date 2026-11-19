@@ -286,6 +286,32 @@ function mealName(m) {
 // ---------- Dzień ----------
 export const CODE_LABEL = { L: "LOW", M: "MEDIUM", H: "HIGH" };
 
+export const suggestMinMeal = (base, n) => Math.round(Math.max(400, base / Math.max(2, n || 4) * 0.8) / 50) * 50;
+
+const GENERIC = ["II śniadanie", "Obiad", "Posiłek", "Podwieczorek", "Kolacja"];
+function codeAndName(meals, act, tomorrowKey, tomorrowLong) {
+  const last = meals.length - 1;
+  meals.forEach((m, i) => {
+    const s = m.sess;
+    let code = "L";
+    if (m.role === "pre") code = s.demand === "high" ? "H" : (s.gym || s.demand === "mid") ? "M" : "L";
+    else if (m.role === "presnack") code = "H";
+    else if (m.role === "recovery") {
+      const nextSoon = act.some(o => o !== s && o.start > s.start && o.start - (s.start + s.durSec / 60) < 8 * 60);
+      code = s.key || nextSoon || (tomorrowKey && i >= last - 1) ? "H" : "M";
+    }
+    if (i === last && !["recovery", "pre", "presnack"].includes(m.role)) code = tomorrowKey ? "H" : tomorrowLong ? "M" : code;
+    if (code === "L" && i > 0 && meals.slice(0, i).some(x => x.role === "recovery" && x.sess && x.sess.key)) code = "M";
+    m.code = code;
+    m.name = mealName(m);
+    const prev = meals.slice(0, i).map(x => x.name);
+    if (/^Śniadanie/.test(m.name) && prev.some(x => /^Śniadanie/.test(x))) m.name = m.name.replace(/^Śniadanie/, "II śniadanie");
+    const g = GENERIC.find(w => m.name === w);
+    if (g && prev.some(x => x.startsWith(g))) m.name = m.kind === "snack" ? "Przekąska" : "Posiłek";
+    if (m.name === "Posiłek" && prev.includes("Posiłek")) m.name = "Posiłek " + (prev.filter(x => x.startsWith("Posiłek")).length + 1);
+  });
+}
+
 export function planDay(day, ctx) {
   const v = ctx.settings;
   const act = day.sessions.filter(s => !s.off);
@@ -293,105 +319,115 @@ export function planDay(day, ctx) {
   const intra = act.reduce((a, s) => a + (s.intra || 0), 0);
   const maint = v.base + train;
   const P = v.prot * v.mass, F = v.fat * v.mass;
-  const tomorrowKey = !!ctx.tomorrowKey, tomorrowLong = !!ctx.tomorrowLong;
-
-  const meals = buildTimeline(act, { wake: v.wake, sleep: v.sleep, meals: v.meals }).map(m => ({ ...m }));
-  const last = meals.length - 1;
-  meals.forEach((m, i) => {
-    const s = m.sess;
-    let code = "L";
-    if (m.role === "pre") code = s.demand === "high" ? "H" : s.gym ? "M" : s.demand === "mid" ? "M" : "L";
-    else if (m.role === "presnack") code = "H";
-    else if (m.role === "recovery") {
-      const sIdx = act.indexOf(s);
-      const nextSoon = act.some(o => o !== s && o.start > s.start && o.start - (s.start + s.durSec / 60) < 8 * 60);
-      code = s.key || nextSoon || (tomorrowKey && i >= last - 1) ? "H" : (s.ride || s.run) ? "M" : "M";
-      if (sIdx < 0) code = "M";
-    }
-    if (i === last && m.role !== "recovery" && m.role !== "pre" && m.role !== "presnack") code = tomorrowKey ? "H" : tomorrowLong ? "M" : code;
-    // Pierwszy główny posiłek po ciężkiej jednostce (poza samą regeneracją): MEDIUM.
-    if (code === "L" && i > 0 && meals.slice(0, i).some(x => x.role === "recovery" && x.sess && x.sess.key)) code = "M";
-    m.code = code;
-    m.name = mealName(m);
-    if (i > 0 && /^Śniadanie/.test(m.name) && meals.slice(0, i).some(x => /^Śniadanie/.test(x.name))) m.name = m.name.replace(/^Śniadanie/, "II śniadanie");
-  });
-
-  // Białko
-  const pw = meals.map(m => m.role === "presnack" ? 0.25 : m.kind === "snack" ? 0.6 : m.role === "recovery" ? 1.2 : 1);
-  const pws = pw.reduce((a, x) => a + x, 0) || 1;
-  meals.forEach((m, i) => m.p = P * pw[i] / pws);
-  // Tłuszcz: więcej w posiłkach LOW, mało wokół treningu
-  const fw = meals.map(m => ({ L: 1.6, M: 1, H: 0.5 }[m.code]) * (m.role === "presnack" ? 0.15 : m.kind === "snack" ? 0.45 : 1));
-  const fws = fw.reduce((a, x) => a + x, 0) || 1;
-  meals.forEach((m, i) => m.f = F * fw[i] / fws);
-  // Ładowanie, start, tryb HP: minimalne węgle dnia i podniesienie kodów.
-  const minKg = Math.max(ctx.loadKg || 0, act.some(s => s.prio) ? carbBand({ sessions: act, key: true }).lo : 0);
-  if (ctx.loadKg || act.some(s => s.prio)) meals.forEach(m => { if (m.code === "L") m.code = "M"; });
-  // Węglowodany
-  const cBase = (maint - 4 * P - 9 * F) / 4;
-  const hpAdd = ctx.hp ? (v.hpCarb || 1) * v.mass : 0;
-  const cTotal = Math.max(cBase + hpAdd, minKg * v.mass);
-  const surplus = (cTotal - cBase) * 4;
-  let cMeals = Math.max(0, cTotal - intra);
-  const lowFix = m => (m.kind === "snack" ? 0.2 : 0.4) * v.mass;
-  const lows = meals.filter(m => m.code === "L"), others = meals.filter(m => m.code !== "L");
-  const lowSum = lows.reduce((a, m) => a + lowFix(m), 0);
-  if (!others.length) meals.forEach(m => m.c = cMeals * lowFix(m) / (lowSum || 1));
-  else {
-    const lowScale = lowSum > cMeals * 0.6 ? cMeals * 0.6 / lowSum : 1;
-    lows.forEach(m => m.c = lowFix(m) * lowScale);
-    const rest = cMeals - lowSum * lowScale;
-    const cw = m => (m.code === "H" ? 2.2 : 1) * (m.role === "presnack" ? 0.35 : m.kind === "snack" ? 0.5 : 1);
-    const cws = others.reduce((a, m) => a + cw(m), 0);
-    others.forEach(m => m.c = rest * cw(m) / cws);
+  const minMain = v.minMeal || suggestMinMeal(v.base, v.meals), minSnack = 150;
+  const isTraining = m => ["pre", "presnack", "recovery"].includes(m.role);
+  let meals = buildTimeline(act, { wake: v.wake, sleep: v.sleep, meals: v.meals }).map(m => ({ ...m }));
+  let res = null;
+  for (let iter = 0; iter < 5; iter++) {
+    res = allocate(meals.map(m => ({ ...m })));
+    const small = res.meals.filter(m => m.kind === "main" && !isTraining(m) && m.kcal < minMain - 5);
+    if (!small.length) break;
+    const free = meals.filter(m => m.kind === "main" && !isTraining(m));
+    if (free.length <= 1) break;
+    // Za mało energii na tyle posiłków: usuń najmniejszy posiłek bazowy (najpierw środkowe, potem śniadanie/kolację).
+    const worst = small.sort((a, b) => (a.role === "meal" ? 0 : 1) - (b.role === "meal" ? 0 : 1) || a.kcal - b.kcal)[0];
+    meals = meals.filter(m => !(m.t === worst.t && m.role === worst.role));
   }
-  // Start: posiłek przed min. 2 g/kg węgli (3 h przed), przekąska ok. 0,5 g/kg.
-  act.filter(s => s.prio).forEach(s => {
-    const pre = meals.find(m => m.role === "pre" && m.s === s.id), sn = meals.find(m => m.role === "presnack" && m.s === s.id);
-    const need = (pre ? Math.max(0, 2 * v.mass - pre.c) : 0) + (sn ? Math.max(0, 0.5 * v.mass - sn.c) : 0);
-    if (!need) return;
-    const donors = meals.filter(m => m !== pre && m !== sn && m.code !== "H" && m.c > 0.3 * v.mass);
-    let left = need;
-    donors.forEach(m => { const take = Math.min(left, m.c - 0.3 * v.mass); m.c -= take; left -= take; });
-    const got = need - left;
-    if (pre) { const add = Math.min(got, Math.max(0, 2 * v.mass - pre.c)); pre.c += add; if (sn) sn.c += got - add; } else if (sn) sn.c += got;
-  });
-  meals.forEach(m => m.kcal = 4 * m.p + 4 * m.c + 9 * m.f);
+  return res;
 
-  // Nawodnienie: ok. 35 ml/kg na dzień poza treningiem, przed treningiem 5–7 ml/kg (ACSM), po treningu 150% niedoboru.
-  const baseMl = 35 * v.mass;
-  meals.forEach(m => { m.ml = m.kind === "snack" ? 250 : 450; });
-  meals.forEach(m => {
-    if (m.role === "pre") m.ml = Math.round(6 * v.mass / 50) * 50;
-    if (m.role === "presnack") m.ml = 250;
-    if (m.role === "recovery" && m.sess) m.ml = Math.round(Math.max(500, m.sess.deficitMl * 1.5) / 50) * 50;
-  });
-  const mealMl = meals.reduce((a, m) => a + m.ml, 0);
-  const intraMl = act.reduce((a, s) => a + (s.fluid || 0), 0);
-  const betweenMl = Math.max(0, Math.round((baseMl + act.reduce((a, s) => a + (s.deficitMl || 0) * 1.5, 0) - mealMl) / 50) * 50);
-
-  // Deficyt: tylko z posiłków LOW (z dala od treningu), zaczynając od wieczoru. Białko bez zmian.
-  let def = 0;
-  const want = ctx.deficit || 0;
-  if (want > 0) {
-    let left = want;
-    const cands = meals.filter(m => m.code === "L" && !["pre", "presnack", "recovery"].includes(m.role)).sort((a, b) => b.t - a.t);
-    for (const m of cands) {
-      if (left <= 1) break;
-      const floorK = m.kind === "main" ? 300 : 150;
-      let take = Math.min(left, Math.max(0, m.kcal - floorK)), got = 0;
-      const dc = Math.min(take / 4, Math.max(0, m.c - 15)); m.c -= dc; got += dc * 4; take -= dc * 4;
-      const df = Math.min(take / 9, Math.max(0, m.f - 6)); m.f -= df; got += df * 9;
-      if (got > 1) { m.kcal = 4 * m.p + 4 * m.c + 9 * m.f; m.cut = true; left -= got; def += got; }
+  function allocate(meals) {
+    codeAndName(meals, act, !!ctx.tomorrowKey, !!ctx.tomorrowLong);
+    // Białko
+    const pw = meals.map(m => m.role === "presnack" ? 0.25 : m.kind === "snack" ? 0.6 : m.role === "recovery" ? 1.2 : 1);
+    const pws = pw.reduce((a, x) => a + x, 0) || 1;
+    meals.forEach((m, i) => m.p = P * pw[i] / pws);
+    // Tłuszcz: więcej w posiłkach LOW, mało wokół treningu
+    const fw = meals.map(m => ({ L: 1.6, M: 1, H: 0.5 }[m.code]) * (m.role === "presnack" ? 0.15 : m.kind === "snack" ? 0.45 : 1));
+    const fws = fw.reduce((a, x) => a + x, 0) || 1;
+    meals.forEach((m, i) => m.f = F * fw[i] / fws);
+    // Ładowanie, start, tryb HP: minimalne węgle dnia i podniesienie kodów.
+    const minKg = Math.max(ctx.loadKg || 0, act.some(s => s.prio) ? carbBand({ sessions: act, key: true }).lo : 0);
+    if (ctx.loadKg || act.some(s => s.prio)) meals.forEach(m => { if (m.code === "L") m.code = "M"; });
+    // Węglowodany
+    const cBase = (maint - 4 * P - 9 * F) / 4;
+    const hpAdd = ctx.hp ? (v.hpCarb || 1) * v.mass : 0;
+    const cTotal = Math.max(cBase + hpAdd, minKg * v.mass);
+    const surplus = (cTotal - cBase) * 4;
+    const cMeals = Math.max(0, cTotal - intra);
+    const lowFix = m => (m.kind === "snack" ? 0.2 : 0.4) * v.mass;
+    const lows = meals.filter(m => m.code === "L"), others = meals.filter(m => m.code !== "L");
+    const lowSum = lows.reduce((a, m) => a + lowFix(m), 0);
+    if (!others.length) meals.forEach(m => m.c = cMeals * lowFix(m) / (lowSum || 1));
+    else {
+      const lowScale = lowSum > cMeals * 0.6 ? cMeals * 0.6 / lowSum : 1;
+      lows.forEach(m => m.c = lowFix(m) * lowScale);
+      const rest = cMeals - lowSum * lowScale;
+      const cw = m => (m.code === "H" ? 2.2 : 1) * (m.role === "presnack" ? 0.35 : m.kind === "snack" ? 0.5 : 1);
+      const cws = others.reduce((a, m) => a + cw(m), 0);
+      others.forEach(m => m.c = rest * cw(m) / cws);
     }
+    // Start: posiłek przed min. 2 g/kg węgli (3 h przed), przekąska ok. 0,5 g/kg.
+    act.filter(s => s.prio).forEach(s => {
+      const pre = meals.find(m => m.role === "pre" && m.s === s.id), sn = meals.find(m => m.role === "presnack" && m.s === s.id);
+      const need = (pre ? Math.max(0, 2 * v.mass - pre.c) : 0) + (sn ? Math.max(0, 0.5 * v.mass - sn.c) : 0);
+      if (!need) return;
+      const donors = meals.filter(m => m !== pre && m !== sn && m.code !== "H" && m.c > 0.3 * v.mass);
+      let left = need;
+      donors.forEach(m => { const take = Math.min(left, m.c - 0.3 * v.mass); m.c -= take; left -= take; });
+      const got = need - left;
+      if (pre) { const add = Math.min(got, Math.max(0, 2 * v.mass - pre.c)); pre.c += add; if (sn) sn.c += got - add; } else if (sn) sn.c += got;
+    });
+    const kc = m => 4 * m.p + 4 * m.c + 9 * m.f;
+    meals.forEach(m => m.kcal = kc(m));
+    // Minimalna wielkość posiłku: dobierz energię z największych posiłków (najpierw tłuszcz, potem węgle).
+    for (const m of meals.filter(x => x.kind === "main" && x.kcal < minMain)) {
+      let need = minMain - m.kcal;
+      const donors = meals.filter(d => d !== m && d.role !== "presnack" && d.kcal > minMain + 50).sort((a, b) => b.kcal - a.kcal);
+      for (const d of donors) {
+        if (need <= 1) break;
+        const room = d.kcal - minMain;
+        const cFloor = d.code === "H" ? 1.0 * v.mass : 0.3 * v.mass;
+        const df = Math.min(need / 9, Math.max(0, d.f - 8), room / 9);
+        d.f -= df; m.f += df; need -= df * 9;
+        const dc = Math.min(need / 4, Math.max(0, d.c - cFloor), (room - df * 9) / 4);
+        if (dc > 0) { d.c -= dc; m.c += dc; need -= dc * 4; }
+        d.kcal = kc(d); m.kcal = kc(m);
+      }
+    }
+    // Nawodnienie: ok. 35 ml/kg na dzień poza treningiem, przed treningiem 5–7 ml/kg (ACSM), po treningu 150% niedoboru.
+    const baseMl = 35 * v.mass;
+    meals.forEach(m => { m.ml = m.kind === "snack" ? 250 : 450; });
+    meals.forEach(m => {
+      if (m.role === "pre") m.ml = Math.round(6 * v.mass / 50) * 50;
+      if (m.role === "presnack") m.ml = 250;
+      if (m.role === "recovery" && m.sess) m.ml = Math.round(Math.max(500, m.sess.deficitMl * 1.5) / 50) * 50;
+    });
+    const mealMl = meals.reduce((a, m) => a + m.ml, 0);
+    const intraMl = act.reduce((a, s) => a + (s.fluid || 0), 0);
+    const betweenMl = Math.max(0, Math.round((baseMl + act.reduce((a, s) => a + (s.deficitMl || 0) * 1.5, 0) - mealMl) / 50) * 50);
+    // Deficyt: tylko z posiłków LOW (z dala od treningu), od wieczoru. Żaden posiłek nie schodzi poniżej minimum.
+    let def = 0;
+    const want = ctx.deficit || 0;
+    if (want > 0) {
+      let left = want;
+      const cands = meals.filter(m => m.code === "L" && !isTraining(m)).sort((a, b) => b.t - a.t);
+      for (const m of cands) {
+        if (left <= 1) break;
+        const floorK = m.kind === "main" ? minMain : minSnack;
+        let take = Math.min(left, Math.max(0, m.kcal - floorK)), got = 0;
+        const dc = Math.min(take / 4, Math.max(0, m.c - 15)); m.c -= dc; got += dc * 4; take -= dc * 4;
+        const df = Math.min(take / 9, Math.max(0, m.f - 6)); m.f -= df; got += df * 9;
+        if (got > 1) { m.kcal = kc(m); m.cut = true; left -= got; def += got; }
+      }
+    }
+    const cT = meals.reduce((a, m) => a + m.c, 0) + intra, pT = meals.reduce((a, m) => a + m.p, 0), fT = meals.reduce((a, m) => a + m.f, 0);
+    const band = carbBand({ sessions: act, key: act.some(s => s.key) });
+    return {
+      meals, maint, train, intra, def, surplus, target: maint - def + surplus, cT, pT, fT, band, minMain,
+      cKg: cT / v.mass, low: cT / v.mass < band.lo - 0.05, loadKg: ctx.loadKg || 0, hp: !!ctx.hp,
+      fluids: { meals: mealMl, intra: intraMl, between: betweenMl, total: mealMl + intraMl + betweenMl },
+    };
   }
-  const cT = meals.reduce((a, m) => a + m.c, 0) + intra, pT = meals.reduce((a, m) => a + m.p, 0), fT = meals.reduce((a, m) => a + m.f, 0);
-  const band = carbBand({ sessions: act, key: act.some(s => s.key) });
-  return {
-    meals, maint, train, intra, def, surplus, target: maint - def + surplus, cT, pT, fT, band,
-    cKg: cT / v.mass, low: cT / v.mass < band.lo - 0.05, loadKg: ctx.loadKg || 0, hp: !!ctx.hp,
-    fluids: { meals: mealMl, intra: intraMl, between: betweenMl, total: mealMl + intraMl + betweenMl },
-  };
 }
 
 // Ładowanie węglowodanami przed startem priorytetowym (Burke i in. 2011): g/kg dla dnia d, gdy start jest za 1 lub 2 dni.

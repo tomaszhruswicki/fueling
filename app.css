@@ -185,3 +185,8 @@ details summary{cursor:pointer}
 .calc div span:last-child{white-space:nowrap;text-align:right}
 .calc small{display:block;color:var(--muted);font-size:.74rem}
 [hidden]{display:none!important}
+.fields input[type=time]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;text-align:left;min-height:42px;line-height:1.2}
+.fields input[type=time]::-webkit-date-and-time-value{text-align:left;margin:0}
+.sess input[type=time]{-webkit-appearance:none;appearance:none;min-width:0;width:auto;min-height:32px}
+.fields input::placeholder{color:var(--muted);opacity:.75}
+.fields label{grid-template-rows:1fr auto}

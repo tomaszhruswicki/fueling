@@ -20,7 +20,7 @@ const API = "https://intervals.icu/api/v1/athlete/0";
 const BACKUP_DATE = "2020-01-01", BACKUP_NAME = "fueling-app: kopia ustawień (nie usuwaj)", FUEL = "Daily fueling";
 const MODES = { normal: "Normalnie", hp: "High performance", tired: "Zmęczenie", sick: "Choroba" };
 
-const DEF = { meals: 4, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 700, cap: 150, hpCarb: 1.0 };
+const DEF = { meals: 4, minMeal: null, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 700, cap: 150, hpCarb: 1.0 };
 let S = {
   settings: { ...DEF }, modes: [], ov: { off: {}, skip: {}, time: {}, prio: {} },
   cache: { events: [], wellness: [], athlete: null, fetchedAt: null, sig: null, changes: null },
@@ -551,11 +551,15 @@ const FIELDS = [
   ["mass", "Masa ciała, kg", "0.1", () => S.cache.athlete && S.cache.athlete.weight ? `z Intervals ${fmt(S.cache.athlete.weight)}` : ""],
   ["ftp", "FTP, W", "1", () => S.cache.athlete && S.cache.athlete.ftp ? `z Intervals ${S.cache.athlete.ftp}` : ""],
   ["height", "Wzrost, cm", "1", () => S.cache.athlete && S.cache.athlete.height ? `z Intervals ${Math.round(S.cache.athlete.height * 100)}` : ""],
-  ["age", "Wiek", "1", () => { const m = maintenance(); return `z Intervals ${m.age}`; }],
-  ["bodyFat", "Tkanka tłuszczowa, % (opcjonalnie)", "0.1", () => "np. 18"],
+  ["age", "Wiek", "1", () => `z Intervals ${maintenance().age}`],
+  ["bodyFat", "Tkanka tłuszczowa, %", "0.1", () => "opcjonalnie"],
   ["prot", "Białko, g/kg", "0.1"], ["fat", "Tłuszcz, g/kg", "0.1"],
-  ["meals", "Posiłki bazowe w dzień wolny (3–6)", "1"], ["wake", "Pobudka", "time"], ["sleep", "Sen", "time"], ["wkTime", "Trening w tygodniu, start", "time"], ["weTime", "Trening w weekend, start", "time"],
-  ["sweat", "Pot, l/h (jazda ok. 70% FTP)", "0.1"], ["sodium", "Sód w pocie, mg/l", "50"], ["hpCarb", "High performance: dodatkowe węgle, g/kg", "0.1"],
+  ["sweat", "Pot, l/h przy 70% FTP", "0.1"], ["sodium", "Sód w pocie, mg/l", "50"], ["hpCarb", "HP: dodatkowe węgle, g/kg", "0.1"],
+];
+const MEAL_FIELDS = [
+  ["meals", "Posiłki w dzień wolny", "1", () => "4"],
+  ["minMeal", "Minimum posiłku, kcal", "10", () => `propozycja ${M.suggestMinMeal(eff().base, S.settings.meals)}`],
+  ["wake", "Pobudka", "time"], ["sleep", "Sen", "time"], ["wkTime", "Trening w tygodniu", "time"], ["weTime", "Trening w weekend", "time"],
 ];
 const CUT = [["weekly", "Deficyt na tydzień, kcal", "50"], ["cap", "Maks. deficyt dnia, kcal", "25"], ["floor", "Minimum dnia bez treningu, kcal", "10", () => `auto ${maintenance().floor}`]];
 const LEVELS = { light: [700, 150], mid: [1050, 250], strong: [1750, 400] };
@@ -569,6 +573,7 @@ let setRendered = false;
 function renderSettings() {
   if (!setRendered || !document.querySelector("#v-set :focus")) {
     $("setFields").innerHTML = FIELDS.map(fieldHtml).join("");
+    $("mealFields").innerHTML = MEAL_FIELDS.map(fieldHtml).join("");
     const lvl = Object.entries(LEVELS).find(([, [w, c]]) => w === S.settings.weekly && c === S.settings.cap);
     $("cutFields").innerHTML = `<label>Poziom<select id="cutLevel"><option value="light" ${lvl && lvl[0] === "light" ? "selected" : ""}>Lekki: 700/tydz., maks. 150/dzień</option><option value="mid" ${lvl && lvl[0] === "mid" ? "selected" : ""}>Umiarkowany: 1050/tydz., maks. 250/dzień</option><option value="strong" ${lvl && lvl[0] === "strong" ? "selected" : ""}>Mocny: 1750/tydz., maks. 400/dzień</option><option value="custom" ${!lvl ? "selected" : ""}>Własny</option></select></label>` + CUT.map(fieldHtml).join("");
     document.querySelectorAll("[data-set]").forEach(el => el.onchange = () => {
