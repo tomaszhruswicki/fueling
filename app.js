@@ -20,7 +20,7 @@ const API = "https://intervals.icu/api/v1/athlete/0";
 const BACKUP_DATE = "2020-01-01", BACKUP_NAME = "fueling-app: kopia ustawień (nie usuwaj)", FUEL = "Daily fueling";
 const MODES = { normal: "Normalnie", hp: "High performance", tired: "Zmęczenie", sick: "Choroba" };
 
-const DEF = { mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 700, cap: 150, hpCarb: 1.0 };
+const DEF = { meals: 4, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 700, cap: 150, hpCarb: 1.0 };
 let S = {
   settings: { ...DEF }, modes: [], ov: { off: {}, skip: {}, time: {}, prio: {} },
   cache: { events: [], wellness: [], athlete: null, fetchedAt: null, sig: null, changes: null },
@@ -554,7 +554,7 @@ const FIELDS = [
   ["age", "Wiek", "1", () => { const m = maintenance(); return `z Intervals ${m.age}`; }],
   ["bodyFat", "Tkanka tłuszczowa, % (opcjonalnie)", "0.1", () => "np. 18"],
   ["prot", "Białko, g/kg", "0.1"], ["fat", "Tłuszcz, g/kg", "0.1"],
-  ["wake", "Pobudka", "time"], ["sleep", "Sen", "time"], ["wkTime", "Trening w tygodniu, start", "time"], ["weTime", "Trening w weekend, start", "time"],
+  ["meals", "Posiłki bazowe w dzień wolny (3–6)", "1"], ["wake", "Pobudka", "time"], ["sleep", "Sen", "time"], ["wkTime", "Trening w tygodniu, start", "time"], ["weTime", "Trening w weekend, start", "time"],
   ["sweat", "Pot, l/h (jazda ok. 70% FTP)", "0.1"], ["sodium", "Sód w pocie, mg/l", "50"], ["hpCarb", "High performance: dodatkowe węgle, g/kg", "0.1"],
 ];
 const CUT = [["weekly", "Deficyt na tydzień, kcal", "50"], ["cap", "Maks. deficyt dnia, kcal", "25"], ["floor", "Minimum dnia bez treningu, kcal", "10", () => `auto ${maintenance().floor}`]];

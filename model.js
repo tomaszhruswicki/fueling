@@ -214,29 +214,40 @@ export function buildTimeline(sessions, opt) {
   let meals = [];
   const add = (t, role, kind, s) => meals.push({ t: Math.round(t), role, kind, s: s ? s.id : null, sess: s || null });
 
+  // 1. Posiłki bazowe (ustawienie): równo od śniadania do kolacji 3 h przed snem. Przy 5+ co drugi to przekąska.
+  const N = Math.max(2, Math.min(7, Math.round(opt.meals || 4)));
+  const first = W + 30, dinnerT = Bt - 180, step = (dinnerT - first) / (N - 1);
+  for (let i = 0; i < N; i++) {
+    const role = i === 0 ? "breakfast" : i === N - 1 ? "dinner" : "meal";
+    add(first + i * step, role, N >= 5 && i % 2 === 1 && i !== N - 1 ? "snack" : "main");
+  }
+  // 2. Trening przejmuje najbliższe posiłki bazowe (przed i po), a brakujące dokłada.
+  const free = m => !m.sess;
   ss.forEach((s, i) => {
     const end = s.start + s.durSec / 60;
     const prevEnd = i ? ss[i - 1].start + ss[i - 1].durSec / 60 : -1;
-    const pre = s.start - 180;
-    if (pre >= W + 30 && pre > prevEnd + 60) add(pre, "pre", "main", s);
+    meals = meals.filter(m => !(free(m) && m.t > s.start - 75 && m.t < end + 15));
+    const own = meals.filter(m => free(m) && m.kind === "main" && m.t >= Math.max(s.start - 240, prevEnd + 30) && m.t <= s.start - 75).sort((a, b) => b.t - a.t)[0];
+    if (own) { own.role = "pre"; own.s = s.id; own.sess = s; }
+    else if (s.start - 180 >= W + 30 && s.start - 180 > prevEnd + 60) add(s.start - 180, "pre", "main", s);
     else if (s.start - (W + 30) >= 45 && s.start - prevEnd > 90) add(Math.max(W + 30, prevEnd + 30, s.start - 120), "pre", s.start - Math.max(W + 30, prevEnd + 30) >= 120 ? "main" : "snack", s);
     else if (s.start - W > 25) add(Math.max(W, s.start - 30), "presnack", "snack", s);
     const fedRecently = meals.some(m => m.role !== "presnack" && m.t >= s.start - 120 && m.t <= s.start - 30) || prevEnd + 30 >= s.start - 120;
     if ((s.high || s.long) && s.start - 60 > W && !fedRecently) add(s.start - 60, "presnack", "snack", s);
-    if (end + 30 < Bt) add(end + 30, "recovery", "main", s);
+    const rec = meals.filter(m => free(m) && m.t >= end + 15 && m.t <= end + 100).sort((a, b) => a.t - b.t)[0];
+    if (rec) { rec.role = "recovery"; rec.kind = "main"; rec.t = Math.round(end + 30); rec.s = s.id; rec.sess = s; }
+    else if (end + 30 < Bt) add(end + 30, "recovery", "main", s);
   });
-  if (!meals.some(m => m.t <= W + 120)) add(W + 30, "breakfast", "main");
-  const dinnerT = Bt - 180;
-  if (!meals.some(m => m.t >= Bt - 240 && m.t <= Bt - 90)) add(dinnerT, "dinner", "main");
 
   const inSession = t => ss.some(s => t > s.start - 20 && t < s.start + s.durSec / 60 + 15);
-  // Wypełnij przerwy dłuższe niż 4,5 h (poza jazdą).
-  for (let guard = 0; guard < 8; guard++) {
+  // 3. Dzień treningowy: wypełnij przerwy dłuższe niż odstęp bazowy + 1 h (poza jazdą).
+  const maxGap = Math.max(270, step + 60);
+  for (let guard = 0; guard < (ss.length ? 8 : 0); guard++) {
     meals.sort((a, b) => a.t - b.t);
     let inserted = false;
     for (let i = 0; i + 1 < meals.length; i++) {
       const a = meals[i], b = meals[i + 1];
-      if (b.t - a.t <= 270) continue;
+      if (b.t - a.t <= maxGap) continue;
       if (ss.some(s => s.start >= a.t && s.start <= b.t)) continue;
       let t = (a.t + b.t) / 2;
       if (inSession(t)) continue;
@@ -265,8 +276,9 @@ function mealName(m) {
   if (m.role === "recovery") return m.kind === "main" ? (t < 10.5 * 60 ? "Śniadanie po treningu" : t < 16 * 60 ? "Obiad po treningu" : "Kolacja po treningu") : "Regeneracja";
   if (m.role === "pre") return m.kind === "main" ? (t < 10.5 * 60 ? "Śniadanie przed treningiem" : t < 16 * 60 ? "Obiad przed treningiem" : "Posiłek przed treningiem") : "Lekki posiłek przed treningiem";
   if (m.kind === "snack") return t < 12 * 60 ? "II śniadanie" : "Podwieczorek";
-  if (t < 10.5 * 60) return "Śniadanie";
-  if (t < 16 * 60) return "Obiad";
+  if (m.role === "breakfast" || (m.role !== "meal" && t < 10.5 * 60)) return "Śniadanie";
+  if (t < 11.5 * 60) return "II śniadanie";
+  if (t < 15 * 60) return "Obiad";
   if (t < 18 * 60) return "Posiłek";
   return "Kolacja";
 }
@@ -283,7 +295,7 @@ export function planDay(day, ctx) {
   const P = v.prot * v.mass, F = v.fat * v.mass;
   const tomorrowKey = !!ctx.tomorrowKey, tomorrowLong = !!ctx.tomorrowLong;
 
-  const meals = buildTimeline(act, { wake: v.wake, sleep: v.sleep }).map(m => ({ ...m }));
+  const meals = buildTimeline(act, { wake: v.wake, sleep: v.sleep, meals: v.meals }).map(m => ({ ...m }));
   const last = meals.length - 1;
   meals.forEach((m, i) => {
     const s = m.sess;
@@ -301,6 +313,7 @@ export function planDay(day, ctx) {
     if (code === "L" && i > 0 && meals.slice(0, i).some(x => x.role === "recovery" && x.sess && x.sess.key)) code = "M";
     m.code = code;
     m.name = mealName(m);
+    if (i > 0 && /^Śniadanie/.test(m.name) && meals.slice(0, i).some(x => /^Śniadanie/.test(x.name))) m.name = m.name.replace(/^Śniadanie/, "II śniadanie");
   });
 
   // Białko
