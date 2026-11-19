@@ -1,0 +1,4 @@
+_seed*
+.claude/
+tools/*.local*
+.DS_Store

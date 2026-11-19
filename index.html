@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://intervals.icu; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#F7F3F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Fueling">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="app.css">
+<title>Fueling</title>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">fueling</span><span class="sync" id="sync" aria-live="polite"></span></div>
+  <button class="btn" id="refresh" type="button">Odśwież</button>
+</header>
+
+<main id="main">
+  <section id="v-day" class="view">
+    <div class="weeknav">
+      <button class="btn icon" id="wPrev" type="button" aria-label="Poprzedni tydzień">‹</button>
+      <div class="wlabel" id="wLabel"></div>
+      <button class="btn icon" id="wNext" type="button" aria-label="Następny tydzień">›</button>
+    </div>
+    <div class="strip" id="strip" role="group" aria-label="Dni"></div>
+    <div id="signal"></div>
+    <div id="dayView"></div>
+  </section>
+
+  <section id="v-week" class="view" hidden>
+    <div class="weeknav">
+      <button class="btn icon" id="wPrev2" type="button" aria-label="Poprzedni tydzień">‹</button>
+      <div class="wlabel" id="wLabel2"></div>
+      <button class="btn icon" id="wNext2" type="button" aria-label="Następny tydzień">›</button>
+    </div>
+    <div class="card" id="weekStats"></div>
+    <div class="card"><h2>Plan tygodnia</h2><div id="weekRows" class="wrows"></div>
+      <div class="legend"><span><i class="c-L"></i>LOW</span><span><i class="c-M"></i>MEDIUM</span><span><i class="c-H"></i>HIGH</span><span><i class="bar-t"></i>trening</span></div>
+    </div>
+    <div class="card"><div class="row between"><h2>Intervals</h2><button class="btn primary" id="exWeek" type="button">Wyślij tydzień</button></div><p class="small muted" id="exStatus" aria-live="polite">Notatka „Daily fueling” na każdy dzień od dziś, z posiłkami i godzinami.</p></div>
+  </section>
+
+  <section id="v-log" class="view" hidden>
+    <div class="weeknav">
+      <button class="btn icon" id="logPrev" type="button" aria-label="Poprzedni dzień">‹</button>
+      <div class="wlabel" id="logLabel"></div>
+      <button class="btn icon" id="logNext" type="button" aria-label="Następny dzień">›</button>
+    </div>
+    <div class="card">
+      <div class="row between"><h2>Koniec dnia</h2><input id="logDate" type="date" aria-label="Wybierz dzień" style="font:inherit;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)"></div>
+      <form id="logForm" class="fields">
+        <label>Waga rano, kg<input id="logW" type="text" inputmode="decimal" placeholder="73,6"></label>
+        <label>Kcal (Fitatu)<input id="logK" type="text" inputmode="numeric"></label>
+        <label>Białko, g<input id="logB" type="text" inputmode="numeric"></label>
+        <label>Węgle, g<input id="logC" type="text" inputmode="numeric"></label>
+        <label>Tłuszcz, g<input id="logF" type="text" inputmode="numeric"></label>
+        <label class="end"><button class="btn primary" type="submit">Zapisz w Intervals</button></label>
+      </form>
+      <p class="small muted" id="logStatus" aria-live="polite">Zapis trafia do wellness w Intervals tego dnia.</p>
+      <div class="cmp" id="logCmp"></div>
+      <p class="small muted" id="logMode"></p>
+    </div>
+    <div class="card"><h2>Waga</h2>
+      <div class="chartbox" id="chart"></div>
+      <div id="calib" class="small"></div>
+    </div>
+    <div class="card"><h2>Wpisy z Intervals</h2><div class="loglist" id="logList"></div></div>
+  </section>
+
+  <section id="v-set" class="view" hidden>
+    <div class="card">
+      <h2>Połączenie z Intervals</h2>
+      <p class="small muted">Klucz API znajdziesz w Intervals: Settings, sekcja Developer Settings. Zostaje tylko na tym urządzeniu. Aplikacja łączy się wyłącznie z intervals.icu.</p>
+      <form id="keyForm" class="fields one">
+        <label>Klucz API<input id="apiKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="wklej klucz"></label>
+        <div class="row"><button class="btn primary" type="submit">Połącz</button><button class="btn" type="button" id="keyDel">Usuń klucz</button></div>
+      </form>
+      <p class="small" id="keyStatus" aria-live="polite"></p>
+    </div>
+    <div class="card">
+      <h2>Parametry</h2>
+      <div class="fields" id="setFields"></div>
+      <p class="small muted" id="setNote"></p>
+    </div>
+    <div class="card">
+      <h2>Redukcja masy</h2>
+      <label class="check"><input type="checkbox" id="cutOn"> Włącz deficyt (tylko posiłki LOW, nigdy przed dniem jakości)</label>
+      <div class="fields" id="cutFields"></div>
+      <p class="small muted">Posiłki przed treningiem, w trakcie i regeneracja zawsze bez cięcia. Deficyt nie wchodzi w dni ładowania, startu, High performance i Choroby. Zmęczenie: maks. 150 kcal na dzień i połowa celu tygodnia.</p>
+    </div>
+    <div class="card">
+      <h2>Historia trybów</h2>
+      <p class="small muted">Tryby ustawiasz w widoku Dzień: na jeden dzień albo od danego dnia do odwołania. Historia zapisuje się na urządzeniu i w kopii w Intervals.</p>
+      <div class="hist" id="modeHist"></div>
+    </div>
+    <div class="card">
+      <h2>Kopia ustawień</h2>
+      <p class="small muted">Plik z ustawieniami bez klucza API. Przydaje się przy zmianie telefonu.</p>
+      <div class="row"><button class="btn" type="button" id="exportSet">Pobierz plik</button><label class="btn file">Wczytaj plik<input type="file" id="importSet" accept="application/json" hidden></label><button class="btn" type="button" id="wipe">Usuń wszystko z urządzenia</button></div>
+      <p class="small" id="setStatus" aria-live="polite"></p>
+    </div>
+    <details class="card">
+      <summary>Metoda i ograniczenia</summary>
+      <div class="small prose">
+        <p>Wydatek na rowerze liczony jest z rozpisanych kroków treningu w Intervals: moc i czas każdego kroku, z powtórzeniami. Praca w kJ odpowiada w przybliżeniu kcal wydatku. Od wydatku odejmowane jest ok. 90 kcal/h, które są już w utrzymaniu.</p>
+        <p>Spalanie węglowodanów liczone jest dla każdego kroku osobno, według udziału węglowodanów zależnego od %FTP (ok. 45% przy 50% FTP, 65% przy 70%, 95% przy 100% FTP). Dzięki temu trening z mocną częścią na początku i długim tlenem dostaje więcej węgli niż sugerowałoby niskie IF.</p>
+        <p>Jedzenie w trakcie jazdy jest rozpisane na odcinki po 30 minut. Podaż pokrywa ok. połowy spalania i wyprzedza mocne fragmenty. Limit to 60 g/h do 90 minut i 90 g/h powyżej. Treningi do ok. 65 minut: bez jedzenia, chyba że mają co najmniej 10 minut powyżej 88% FTP.</p>
+        <p>Posiłki mają kod węglowodanów. HIGH: przed jakością i po niej oraz wieczór przed dniem jakości. MEDIUM: przed i po lżejszym treningu. LOW: posiłki z dala od treningu. Białko jest rozłożone równo, tłuszcz trafia głównie do posiłków LOW. Model opiera się na podejściu „fuel for the work required” (Impey i in. 2018, LJMU) i zakresach węglowodanów dla sportowców (Burke i in. 2011).</p>
+        <p>Siłownia: ok. 280 kcal/h, bieg: ok. 10 kcal/min. Treningi bez rozpisanych kroków liczone są ze średniej mocy albo z IF. Gdy brakuje obu, aplikacja przyjmuje założenie i oznacza je w widoku dnia.</p>
+        <p>Szacunki mają błąd ok. 10–15%. To narzędzie wspierające planowanie, nie porada dietetyczna ani medyczna.</p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Widoki">
+  <button type="button" data-view="day" aria-current="page">Dzień</button>
+  <button type="button" data-view="week">Tydzień</button>
+  <button type="button" data-view="log">Dziennik</button>
+  <button type="button" data-view="set">Ustawienia</button>
+</nav>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
