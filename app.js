@@ -273,7 +273,9 @@ function computeRange(start, n) {
   });
   return { v, show };
 }
-const winStart = () => addDays(todayISO(), 7 * S.week);
+// Tydzień zawsze od poniedziałku do niedzieli.
+const mondayOf = d => addDays(d, -((parseD(d).getDay() + 6) % 7));
+const winStart = () => addDays(mondayOf(todayISO()), 7 * S.week);
 
 // ---------- Render: wspólne ----------
 function render() {
@@ -283,7 +285,7 @@ function render() {
 }
 function renderNav() {
   const f = R.show[0], l = R.show[6];
-  const txt = `${dnum(f.date)} – ${dnum(l.date)}${S.week === 0 ? " · od dziś" : ""}`;
+  const txt = `Pn ${dnum(f.date)} – Nd ${dnum(l.date)}${S.week === 0 ? " · ten tydzień" : S.week === 1 ? " · następny" : S.week === -1 ? " · poprzedni" : ""}`;
   $("wLabel").textContent = txt; $("wLabel2").textContent = txt;
   const minW = -2, maxW = 5;
   ["wPrev", "wPrev2"].forEach(id => $(id).disabled = S.week <= minW);
@@ -516,6 +518,12 @@ function renderLog() {
   const setIf = (id, val) => { const el = $(id); if (document.activeElement !== el) el.value = val != null && val !== "" ? String(val).replace(".", ",") : ""; };
   setIf("logW", w.weight); setIf("logK", w.kcalConsumed); setIf("logB", w.protein); setIf("logC", w.carbohydrates); setIf("logF", w.fatTotal);
   $("logPrev").disabled = d <= addDays(todayISO(), -120); $("logNext").disabled = d >= todayISO();
+  const mon = mondayOf(d), t = todayISO();
+  $("logStrip").innerHTML = Array.from({ length: 7 }, (_, i) => addDays(mon, i)).map(x => {
+    const w = wellnessOn(x), done = w.kcalConsumed || w.weight;
+    return `<button type="button" class="dbtn" data-logday="${x}" aria-pressed="${x === d}" ${x > t ? "disabled" : ""} aria-label="${DOWL[parseD(x).getDay()]} ${dnum(x)}${done ? ", są wpisy" : ""}"><span class="${x === t ? "today" : "dw"}">${x === t ? "dziś" : DOW[parseD(x).getDay()]}</span><span class="dd">${parseD(x).getDate()}</span><span class="dk">${w.kcalConsumed ? fmt(w.kcalConsumed / 1000, 1) + "k" : w.weight ? fmt(w.weight, 1) : "–"}</span><span class="mk ${done ? "key" : "rest"}"></span></button>`;
+  }).join("");
+  document.querySelectorAll("[data-logday]").forEach(b => b.onclick = () => { S.logDate = b.dataset.logday; renderLog(); });
   $("logLabel").textContent = `${DOWL[parseD(d).getDay()]} ${dnum(d)}${d === todayISO() ? " · dziś" : ""}`;
   const has = w.kcalConsumed || w.protein || w.carbohydrates || w.fatTotal;
   const dv = (a, b) => b ? `${a >= b ? "+" : "−"}${kfmt(Math.abs(a - b))}` : "";
@@ -692,5 +700,6 @@ load(); render(); setSync(); showView("day");
 if (getKey()) refresh(false);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && Date.now() - (S.cache.fetchedAt || 0) > 2 * 60e3) refresh(false); });
 setInterval(() => { if (document.visibilityState === "visible" && Date.now() - (S.cache.fetchedAt || 0) > 5 * 60e3) refresh(false); }, 60e3);
-setInterval(() => { if (S.week === 0 && R && R.show[0].date !== todayISO()) render(); }, 10 * 60e3);
+let lastDay = todayISO();
+setInterval(() => { if (todayISO() !== lastDay) { lastDay = todayISO(); render(); } }, 10 * 60e3);
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

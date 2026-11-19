@@ -200,3 +200,4 @@ details summary{cursor:pointer}
 #dayTimesBox summary{list-style:none}
 #dayTimesBox summary::-webkit-details-marker{display:none}
 #dayTimesBox[open] summary{margin-bottom:8px}
+.dbtn[disabled]{opacity:.35;cursor:default}
