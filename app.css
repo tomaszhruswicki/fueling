@@ -96,7 +96,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 .ti .rail::before{content:"";position:absolute;top:0;bottom:0;width:2px;background:var(--line)}
 .ti:first-child .rail::before{top:18px}.ti:last-child .rail::before{bottom:calc(100% - 18px)}
 .ti .node{position:relative;margin-top:14px;width:12px;height:12px;border-radius:50%;background:var(--low);border:2px solid var(--surface);box-sizing:content-box}
-.node.c-M{background:var(--mid)}.node.c-H{background:var(--high)}.node.sess{border-radius:3px;background:var(--ink);width:12px;height:12px}
+.node.c-M{background:var(--mid)}.node.c-H{background:var(--high)}
 .ti .body{padding:8px 0 10px;min-width:0}
 .meal{background:var(--bg);border-radius:12px;padding:10px 12px;display:grid;gap:6px}
 .meal.cut{box-shadow:inset 3px 0 0 var(--ink)}
@@ -201,3 +201,23 @@ details summary{cursor:pointer}
 #dayTimesBox summary::-webkit-details-marker{display:none}
 #dayTimesBox[open] summary{margin-bottom:8px}
 .dbtn[disabled]{opacity:.35;cursor:default}
+/* Odstępy między kartami widoku dnia */
+#dayView{display:grid;gap:12px}
+/* Karta ustawień dnia */
+.dayset{gap:0}
+.dayset .seg{margin-bottom:6px}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 2px;border-top:1px solid var(--line);cursor:pointer;min-height:44px}
+.setrow .muted{text-align:right}
+select.inl{font:500 .88rem var(--f);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:6px 12px;-webkit-appearance:none;appearance:none}
+input.sw{-webkit-appearance:none;appearance:none;width:44px;height:26px;border-radius:999px;background:var(--sand);position:relative;cursor:pointer;flex:none;margin:0;transition:background .15s}
+input.sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+input.sw:checked{background:var(--violet)}
+input.sw:checked::after{transform:translateX(18px)}
+#dayTimesBox summary{list-style:none}
+#dayTimesBox summary::-webkit-details-marker{display:none}
+#dayTimesBox[open] summary .muted{color:var(--ink)}
+.timesbody{display:grid;gap:10px;padding:4px 2px 4px}
+/* Węzeł treningu na osi: mały prostokąt, nie rozciągany */
+.ti .node{flex:none;align-self:flex-start}
+.node.n-sess{width:10px;height:16px;border-radius:3px;background:var(--ink);margin-top:12px}
+.wlabel small{display:block;font-size:.72rem;font-weight:500;color:var(--muted);line-height:1.2}

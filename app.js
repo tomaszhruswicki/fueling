@@ -285,8 +285,9 @@ function render() {
 }
 function renderNav() {
   const f = R.show[0], l = R.show[6];
-  const txt = `Pn ${dnum(f.date)} – Nd ${dnum(l.date)}${S.week === 0 ? " · ten tydzień" : S.week === 1 ? " · następny" : S.week === -1 ? " · poprzedni" : ""}`;
-  $("wLabel").textContent = txt; $("wLabel2").textContent = txt;
+  const rel = S.week === 0 ? "ten tydzień" : S.week === 1 ? "następny tydzień" : S.week === -1 ? "poprzedni tydzień" : "";
+  const txt = `${dnum(f.date)} – ${dnum(l.date)}${rel ? `<small>${rel}</small>` : ""}`;
+  $("wLabel").innerHTML = txt; $("wLabel2").innerHTML = txt;
   const minW = -2, maxW = 5;
   ["wPrev", "wPrev2"].forEach(id => $(id).disabled = S.week <= minW);
   ["wNext", "wNext2"].forEach(id => $(id).disabled = S.week >= maxW);
@@ -380,7 +381,7 @@ function renderDay() {
   const why = mode === "sick" ? "Tryb Choroba: bez deficytu. Odznacz treningi, których nie zrobisz." : d.loadKg ? "Ładowanie przed startem: więcej węgli w każdym posiłku, mniej błonnika i tłuszczu." : d.prio ? "Dzień startu: posiłek przed min. 2 g/kg węgli ok. 3 h przed, pełna podaż w trakcie." : mode === "hp" ? `High performance: +${fmt(v.hpCarb, 1)} g/kg węgli ponad bilans, bez deficytu.` : !v.cutOn ? "Bilans na zero." : S.ov.skip[d.date] ? "Deficyt wyłączony ręcznie na ten dzień." : d.tomorrowKey ? "Jutro jakość, więc wieczór na zero." : p.def > 0 ? "Deficyt tylko z posiłków LOW, od wieczoru. Posiłki wokół treningu bez zmian." : "Bez deficytu.";
 
   // Timeline: posiłki i treningi wg czasu
-  const items = [...p.meals.map(m => ({ t: m.t, h: mealCard(m), node: `c-${m.code}` })), ...d.ss.map(s => ({ t: s.start, h: sessionCard(s, d, v), node: "sess" }))].sort((a, b) => a.t - b.t);
+  const items = [...p.meals.map(m => ({ t: m.t, h: mealCard(m), node: `c-${m.code}` })), ...d.ss.map(s => ({ t: s.start, h: sessionCard(s, d, v), node: "n-sess" }))].sort((a, b) => a.t - b.t);
   const tl = items.map(it => `<div class="ti"><div class="tt">${M.fmtTime(it.t)}</div><div class="rail"><span class="node ${it.node}"></span></div><div class="body">${it.h}</div></div>`).join("");
 
   $("dayView").innerHTML = `
@@ -390,23 +391,25 @@ function renderDay() {
       <div class="macro"><span>Białko</span><b>${r5(p.pT)} g</b><i>${fmt(p.pT / v.mass)} g/kg</i></div>
       <div class="macro"><span>Węgle</span><b>${r5(p.cT)} g</b><i>${fmt(p.cKg)} g/kg</i></div>
       <div class="macro"><span>Tłuszcz</span><b>${r5(p.fT)} g</b><i>${fmt(p.fT / v.mass)} g/kg</i></div>
-      <div class="macro"><span>Płyny</span><b class="water">${lfmt(p.fluids.total)}</b><i>${p.fluids.intra ? "w tym trening " + lfmt(p.fluids.intra) : "35 ml/kg"}</i></div>
+      <div class="macro"><span>Płyny</span><b class="water">${lfmt(p.fluids.total)}</b><i>${p.fluids.intra ? "trening " + lfmt(p.fluids.intra) : "35 ml/kg"}</i></div>
     </div>
     <p class="band ${p.low ? "low" : ""}">Zakres węgli dla tego dnia: ${p.band.label}, ${p.band.lo}–${p.band.hi} g/kg.${p.low ? " Plan jest poniżej zakresu: podnieś utrzymanie albo wyłącz deficyt." : ""}</p>
     <p class="small muted">${why} Utrzymanie ${kfmt(p.maint)} kcal, trening ${kfmt(p.train)} kcal, w trakcie ${r5(p.intra)} g węgli.</p>
     ${d.notes.length ? `<p class="small"><b>W kalendarzu:</b> ${d.notes.map(esc).join(" · ")}</p>` : ""}
     ${dayLine(d, v)}
   </div>
-  <div class="card">
-    <div class="row between"><h2>Tryb</h2><select id="modeScope" aria-label="Zakres trybu" style="font:inherit;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)"><option value="day" ${S.modeScope === "day" ? "selected" : ""}>tylko ten dzień</option><option value="period" ${S.modeScope === "period" ? "selected" : ""}>od tego dnia do odwołania</option></select></div>
+  <div class="card dayset">
     <div class="seg" role="group" aria-label="Tryb dnia">${Object.entries(MODES).map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${mode === k}">${l === "High performance" ? "HP" : l}</button>`).join("")}</div>
-    ${v.cutOn && !d.tomorrowKey && mode !== "sick" ? `<label class="check small"><input type="checkbox" id="skipDay" ${S.ov.skip[d.date] ? "checked" : ""}> bez deficytu w tym dniu</label>` : ""}
+    <div class="setrow"><span class="small muted">Zmiana trybu</span><select id="modeScope" class="inl" aria-label="Zakres trybu"><option value="day" ${S.modeScope === "day" ? "selected" : ""}>tylko ten dzień</option><option value="period" ${S.modeScope === "period" ? "selected" : ""}>od tego dnia</option></select></div>
+    ${v.cutOn && !d.tomorrowKey && mode !== "sick" ? `<label class="setrow"><span class="small">Bez deficytu w tym dniu</span><input type="checkbox" class="sw" id="skipDay" ${S.ov.skip[d.date] ? "checked" : ""}></label>` : ""}
+    <details id="dayTimesBox" ${S.openTimes ? "open" : ""}><summary class="setrow"><span class="small">Pory posiłków</span><span class="small muted">${esc(d.times.src)} ›</span></summary>
+      <div class="timesbody">
+        <div id="dayTimes"></div>
+        <p class="small muted">Dotyczy tylko ${dnum(d.date)}. Przy treningu najbliższy posiłek przed staje się posiłkiem przed treningiem, pierwszy po treningu regeneracją.</p>
+        <button type="button" class="btn" id="timesToDow">Ustaw na wszystkie ${DOWN[dt.getDay()]}</button>
+      </div>
+    </details>
   </div>
-  <details class="card" id="dayTimesBox" ${S.openTimes ? "open" : ""}><summary><b>Pory posiłków</b> <span class="small muted">· ${esc(d.times.src)}</span></summary>
-    <div id="dayTimes"></div>
-    <p class="small muted">Zmiana tutaj dotyczy tylko ${dnum(d.date)}. Posiłki przy treningu dopasowują się same: najbliższy przed treningiem staje się posiłkiem przed, pierwszy po treningu regeneracją.</p>
-    <div class="row"><button type="button" class="btn" id="timesToDow">Ustaw te pory na wszystkie ${DOWN[dt.getDay()]}</button></div>
-  </details>
   <div class="card"><h2>Plan dnia</h2>${d.ss.length || p.meals.length ? `<div class="tl">${tl}</div>` : ""}
     <div class="between-water">Między posiłkami dopij ok. ${lfmt(p.fluids.between)} wody.</div>
     <div class="row between"><span class="small muted" id="dayEx">${exLine(d)}</span><button class="btn" type="button" id="exDay">${S.exp[d.date] ? "Zaktualizuj w Intervals" : "Wyślij dzień do Intervals"}</button></div>
