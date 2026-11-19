@@ -87,6 +87,14 @@
       <p class="small" id="keyStatus" aria-live="polite"></p>
     </div>
     <div class="card">
+      <h2>Utrzymanie (dzień bez treningu)</h2>
+      <div class="seg" role="group" aria-label="Źródło utrzymania"><button type="button" data-bmode="auto">Automatycznie</button><button type="button" data-bmode="manual">Ręcznie</button></div>
+      <div class="fields one" id="baseManual" hidden><label>Utrzymanie, kcal<input id="baseVal" type="text" inputmode="numeric"></label></div>
+      <div class="calc" id="maintCalc"></div>
+      <p class="small" id="maintNow"></p>
+      <p class="small muted">Trening dolicza się osobno z planu w Intervals. Automatycznie: wynik kalkulatora, a po zebraniu danych z Dziennika średnia kalkulatora i Twoich danych. Kalkulator ma błąd ok. 10%, dane z wagi i kcal go zawężają.</p>
+    </div>
+    <div class="card">
       <h2>Parametry</h2>
       <div class="fields" id="setFields"></div>
       <p class="small muted" id="setNote"></p>

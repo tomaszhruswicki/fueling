@@ -180,3 +180,8 @@ details summary{cursor:pointer}
 .tabs button{font:600 .8rem var(--f);background:none;border:0;color:var(--muted);padding:10px 0;border-radius:10px;cursor:pointer}
 .tabs button[aria-current="page"]{color:var(--ink);background:var(--bg)}
 .empty{padding:24px 8px;text-align:center;display:grid;gap:10px;justify-items:center}
+.calc{display:grid;font-size:.84rem}
+.calc div{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);align-items:baseline}
+.calc div span:last-child{white-space:nowrap;text-align:right}
+.calc small{display:block;color:var(--muted);font-size:.74rem}
+[hidden]{display:none!important}

@@ -20,7 +20,7 @@ const API = "https://intervals.icu/api/v1/athlete/0";
 const BACKUP_DATE = "2020-01-01", BACKUP_NAME = "fueling-app: kopia ustawień (nie usuwaj)", FUEL = "Daily fueling";
 const MODES = { normal: "Normalnie", hp: "High performance", tired: "Zmęczenie", sick: "Choroba" };
 
-const DEF = { mass: null, base: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 1750, cap: 400, hpCarb: 1.0 };
+const DEF = { mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 700, cap: 150, hpCarb: 1.0 };
 let S = {
   settings: { ...DEF }, modes: [], ov: { off: {}, skip: {}, time: {}, prio: {} },
   cache: { events: [], wellness: [], athlete: null, fetchedAt: null, sig: null, changes: null },
@@ -111,7 +111,7 @@ async function refresh(manual) {
     if (S.cache.sig && newSig !== S.cache.sig) S.cache.changes = diffEvents(prev, ev || []);
     else if (manual) S.cache.changes = null;
     const ride = (ath.sportSettings || []).find(s => (s.types || []).includes("Ride")) || {};
-    S.cache = { ...S.cache, athlete: { weight: ath.icu_weight || ath.weight || null, ftp: ride.ftp || null, zones: ride.power_zones || null, tz: ath.timezone }, events: ev || [], wellness: wl || [], fetchedAt: Date.now(), sig: newSig };
+    S.cache = { ...S.cache, athlete: { weight: ath.icu_weight || ath.weight || null, ftp: ride.ftp || null, zones: ride.power_zones || null, tz: ath.timezone, height: ath.height || null, dob: ath.icu_date_of_birth || null, sex: ath.sex || null }, events: ev || [], wellness: wl || [], fetchedAt: Date.now(), sig: newSig };
     syncExp(ev || []);
     persist(); render();
     setSync(restored ? "Przywrócono ustawienia z kopii w Intervals." : "");
@@ -131,10 +131,52 @@ function setSync(msg) {
 }
 
 // ---------- Ustawienia efektywne ----------
-function eff() {
+// Utrzymanie dnia bez treningu = RMR × 1,2 (dzień siedzący z termogenezą posiłków) + kroki.
+// RMR: Cunningham (500 + 22 × beztłuszczowa masa ciała), gdy znany % tkanki tłuszczowej; inaczej ten Haaf i Weijs 2014 (równanie dla sportowców).
+function maintenance() {
   const a = S.cache.athlete || {}, s = S.settings;
   const mass = s.mass || a.weight || 75;
-  return { ...s, mass, ftp: s.ftp || a.ftp || 250, zones: a.zones || [55, 75, 90, 105, 120, 150, 999], base: s.base || r10(mass * 31), wake: M.parseHM(s.wake), sleep: M.parseHM(s.sleep) };
+  const height = s.height ? (s.height > 3 ? s.height / 100 : s.height) : a.height || 1.75;
+  let age = s.age;
+  if (!age && a.dob) { const b = new Date(a.dob), n = new Date(); age = n.getFullYear() - b.getFullYear() - ((n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) ? 1 : 0); }
+  age = age || 35;
+  const male = (a.sex || "M") !== "F";
+  const ffm = s.bodyFat ? mass * (1 - s.bodyFat / 100) : null;
+  const rmr = ffm ? 500 + 22 * ffm : 11.936 * mass + 587.728 * height - 8.129 * age + 191.027 * (male ? 1 : 0) + 29.279;
+  const recent = (S.cache.wellness || []).filter(x => x.id >= addDays(todayISO(), -28) && x.steps);
+  const steps = recent.length >= 7 ? recent.reduce((t, x) => t + x.steps, 0) / recent.length : null;
+  const stepKcal = (steps ?? 7000) * 0.0005 * mass;
+  const formula = rmr * 1.2 + stepKcal;
+  const cal = calibration(mass);
+  const floor = s.floor || r10(rmr * 1.15);
+  let base, src;
+  if (s.baseMode === "manual" && s.base) { base = s.base; src = "ręcznie"; }
+  else if (cal) { base = r10(0.5 * cal.base + 0.5 * formula); src = "kalkulator i Twoje dane"; }
+  else { base = r10(formula); src = "kalkulator"; }
+  return { base, src, rmr, rmrEq: ffm ? "Cunningham" : "ten Haaf", ffm, steps, stepKcal, formula, cal, floor, mass, height, age };
+}
+// Kalibracja z danych: średnie kcal zjedzone minus zmiana masy (7700 kcal/kg) minus średni wydatek treningowy z planu.
+let calCache = null;
+function calibration(mass) {
+  const key = (S.cache.fetchedAt || 0) + "|" + S.savedAt;
+  if (calCache && calCache.key === key) return calCache.val;
+  const from = addDays(todayISO(), -28), wl = (S.cache.wellness || []).filter(x => x.id >= from && x.id < todayISO());
+  const kc = wl.filter(x => x.kcalConsumed), wts = wl.filter(x => x.weight);
+  let val = null;
+  if (kc.length >= 14 && wts.length >= 8) {
+    const half = Math.floor(wts.length / 2), avg = a => a.reduce((t, x) => t + x.weight, 0) / a.length;
+    const w1 = avg(wts.slice(0, half)), w2 = avg(wts.slice(half));
+    const days = (parseD(wts[wts.length - 1].id) - parseD(wts[0].id)) / 864e5 / 2 || 1;
+    const ftp = S.settings.ftp || (S.cache.athlete || {}).ftp || 250, zones = (S.cache.athlete || {}).zones;
+    const train = kc.map(x => sessionsFor(x.id, { ftp, zones, sweat: 0.9, sodium: 700, wake: 390 }).filter(s => !s.off).reduce((t, s) => t + s.kcal, 0));
+    const tdee = kc.reduce((t, x) => t + x.kcalConsumed, 0) / kc.length - (w2 - w1) * 7700 / days;
+    val = { base: tdee - train.reduce((t, x) => t + x, 0) / train.length, tdee, n: kc.length, nw: wts.length, dW: w2 - w1 };
+  }
+  calCache = { key, val }; return val;
+}
+function eff() {
+  const a = S.cache.athlete || {}, s = S.settings, m = maintenance();
+  return { ...s, mass: m.mass, ftp: s.ftp || a.ftp || 250, zones: a.zones || [55, 75, 90, 105, 120, 150, 999], base: m.base, floor: m.floor, wake: M.parseHM(s.wake), sleep: M.parseHM(s.sleep) };
 }
 
 // ---------- Tryby z historią ----------
@@ -195,6 +237,7 @@ function computeRange(start, n) {
   show.forEach(d => {
     const tired = d.mode === "tired";
     d.want = d.allowed ? Math.min(tired ? Math.min(150, v.cap) : v.cap, (tired ? v.weekly / 2 : v.weekly) / Math.max(1, n2)) : 0;
+    d.want = Math.min(d.want, Math.max(0, v.base - v.floor)); // minimum dnia: część poza treningiem nie schodzi poniżej progu
     d.plan = M.planDay({ sessions: d.ss }, { settings: v, tomorrowKey: d.tomorrowKey, tomorrowLong: d.tomorrowLong, deficit: d.want, hp: d.mode === "hp", loadKg: d.loadKg });
     const [tag, tagLabel] = dayTag(d.act); d.tag = tag; d.tagLabel = tagLabel;
     d.notes = notesFor(d.date);
@@ -488,16 +531,34 @@ $("logForm").addEventListener("submit", async e => {
 });
 
 // ---------- Ustawienia ----------
+function renderMaint() {
+  const m = maintenance(), s = S.settings;
+  const rows = [
+    ["Spoczynkowa przemiana materii (RMR)", `${kfmt(m.rmr)} kcal`, m.rmrEq === "Cunningham" ? `Cunningham, masa beztłuszczowa ${fmt(m.ffm)} kg` : `ten Haaf 2014: ${fmt(m.mass)} kg, ${Math.round(m.height * 100)} cm, ${m.age} lat`],
+    ["Dzień siedzący, ×1,2", `${kfmt(m.rmr * 1.2)} kcal`, "z termogenezą posiłków"],
+    ["Kroki", `+${kfmt(m.stepKcal)} kcal`, m.steps ? `średnio ${kfmt(m.steps)} dziennie z 28 dni w Intervals` : "brak kroków w Intervals, przyjęto 7000"],
+    ["Wynik kalkulatora", `<b>${kfmt(m.formula)} kcal</b>`, ""],
+    ["Z Twoich danych", m.cal ? `<b>${kfmt(m.cal.base)} kcal</b>` : "–", m.cal ? `${m.cal.n} dni z kcal, ${m.cal.nw} pomiarów wagi, zmiana ${fmt(m.cal.dW, 2)} kg; TDEE z treningiem ${kfmt(m.cal.tdee)}` : "potrzeba min. 14 dni z kcal i 8 pomiarów wagi z 28 dni"],
+  ];
+  $("maintCalc").innerHTML = rows.map(([a, b, c]) => `<div><span>${a}${c ? `<small>${esc(c)}</small>` : ""}</span><span>${b}</span></div>`).join("");
+  $("maintNow").innerHTML = `Liczę z: <b>${kfmt(m.base)} kcal</b> (${m.src}). Minimum dnia bez treningu przy deficycie: ${kfmt(m.floor)} kcal.`;
+  document.querySelectorAll("[data-bmode]").forEach(b => b.setAttribute("aria-pressed", String((s.baseMode || "auto") === b.dataset.bmode)));
+  $("baseManual").hidden = s.baseMode !== "manual";
+  if (document.activeElement !== $("baseVal")) $("baseVal").value = s.base || "";
+}
+
 const FIELDS = [
   ["mass", "Masa ciała, kg", "0.1", () => S.cache.athlete && S.cache.athlete.weight ? `z Intervals ${fmt(S.cache.athlete.weight)}` : ""],
   ["ftp", "FTP, W", "1", () => S.cache.athlete && S.cache.athlete.ftp ? `z Intervals ${S.cache.athlete.ftp}` : ""],
-  ["base", "Utrzymanie w dzień wolny, kcal", "10", () => `domyślnie ok. ${r10(eff().mass * 31)}`],
+  ["height", "Wzrost, cm", "1", () => S.cache.athlete && S.cache.athlete.height ? `z Intervals ${Math.round(S.cache.athlete.height * 100)}` : ""],
+  ["age", "Wiek", "1", () => { const m = maintenance(); return `z Intervals ${m.age}`; }],
+  ["bodyFat", "Tkanka tłuszczowa, % (opcjonalnie)", "0.1", () => "np. 18"],
   ["prot", "Białko, g/kg", "0.1"], ["fat", "Tłuszcz, g/kg", "0.1"],
   ["wake", "Pobudka", "time"], ["sleep", "Sen", "time"], ["wkTime", "Trening w tygodniu, start", "time"], ["weTime", "Trening w weekend, start", "time"],
   ["sweat", "Pot, l/h (jazda ok. 70% FTP)", "0.1"], ["sodium", "Sód w pocie, mg/l", "50"], ["hpCarb", "High performance: dodatkowe węgle, g/kg", "0.1"],
 ];
-const CUT = [["weekly", "Deficyt na tydzień, kcal", "50"], ["cap", "Maks. deficyt dnia, kcal", "25"]];
-const LEVELS = { light: [1050, 250], mid: [1750, 400], strong: [2450, 500] };
+const CUT = [["weekly", "Deficyt na tydzień, kcal", "50"], ["cap", "Maks. deficyt dnia, kcal", "25"], ["floor", "Minimum dnia bez treningu, kcal", "10", () => `auto ${maintenance().floor}`]];
+const LEVELS = { light: [700, 150], mid: [1050, 250], strong: [1750, 400] };
 function fieldHtml([k, label, step, hint]) {
   const val = S.settings[k] ?? "", isT = step === "time";
   const v = isT ? String(val).padStart(5, "0") : String(val).replace(".", ",");
@@ -509,7 +570,7 @@ function renderSettings() {
   if (!setRendered || !document.querySelector("#v-set :focus")) {
     $("setFields").innerHTML = FIELDS.map(fieldHtml).join("");
     const lvl = Object.entries(LEVELS).find(([, [w, c]]) => w === S.settings.weekly && c === S.settings.cap);
-    $("cutFields").innerHTML = `<label>Poziom<select id="cutLevel"><option value="light" ${lvl && lvl[0] === "light" ? "selected" : ""}>Lekki: 1050/tydz., maks. 250/dzień</option><option value="mid" ${lvl && lvl[0] === "mid" ? "selected" : ""}>Umiarkowany: 1750/tydz., maks. 400/dzień</option><option value="strong" ${lvl && lvl[0] === "strong" ? "selected" : ""}>Mocny: 2450/tydz., maks. 500/dzień</option><option value="custom" ${!lvl ? "selected" : ""}>Własny</option></select></label>` + CUT.map(fieldHtml).join("");
+    $("cutFields").innerHTML = `<label>Poziom<select id="cutLevel"><option value="light" ${lvl && lvl[0] === "light" ? "selected" : ""}>Lekki: 700/tydz., maks. 150/dzień</option><option value="mid" ${lvl && lvl[0] === "mid" ? "selected" : ""}>Umiarkowany: 1050/tydz., maks. 250/dzień</option><option value="strong" ${lvl && lvl[0] === "strong" ? "selected" : ""}>Mocny: 1750/tydz., maks. 400/dzień</option><option value="custom" ${!lvl ? "selected" : ""}>Własny</option></select></label>` + CUT.map(fieldHtml).join("");
     document.querySelectorAll("[data-set]").forEach(el => el.onchange = () => {
       const k = el.dataset.set; let val = el.type === "time" ? el.value : num(el.value);
       if (el.type === "time" && val) val = val.replace(/^0(\d)/, "$1");
@@ -519,12 +580,15 @@ function renderSettings() {
     setRendered = true;
   }
   $("cutOn").checked = !!S.settings.cutOn;
-  $("setNote").textContent = `Puste pola biorą wartości z Intervals albo domyślne. Teraz liczę z: masa ${fmt(eff().mass)} kg, FTP ${eff().ftp} W, utrzymanie ${kfmt(eff().base)} kcal. Utrzymanie koryguj po 2–3 tygodniach wpisów w Dzienniku.`;
+  $("setNote").textContent = `Puste pola biorą wartości z Intervals albo domyślne. Teraz liczę z: masa ${fmt(eff().mass)} kg, FTP ${eff().ftp} W.`;
+  renderMaint();
   const hist = S.modes.slice().sort((a, b) => b.at - a.at).slice(0, 30);
   $("modeHist").innerHTML = hist.length ? hist.map(e => `<div><span>${e.end ? "Koniec trybu" : MODES[e.mode]} · ${dnum(e.from)}${e.to && e.to !== e.from ? "–" + dnum(e.to) : e.to ? "" : " → do odwołania"}${e.cancelled ? " · anulowano" : ""}</span><button class="x" type="button" data-delmode="${e.id}" aria-label="Usuń wpis">×</button></div>`).join("") : `<p class="small muted">Brak wpisów. Tryb ustawiasz w widoku Dzień.</p>`;
   document.querySelectorAll("[data-delmode]").forEach(b => b.onclick = () => { S.modes = S.modes.filter(e => String(e.id) !== b.dataset.delmode); changed(); render(); });
   $("keyStatus").textContent = getKey() ? "Klucz zapisany na tym urządzeniu." : "Brak klucza.";
 }
+document.querySelectorAll("[data-bmode]").forEach(b => b.onclick = () => { S.settings.baseMode = b.dataset.bmode; if (b.dataset.bmode === "manual" && !S.settings.base) S.settings.base = maintenance().base; changed(); render(); });
+$("baseVal").onchange = e => { const x = num(e.target.value); S.settings.base = x || null; changed(); render(); };
 $("cutOn").onchange = e => { S.settings.cutOn = e.target.checked; changed(); render(); };
 $("keyForm").addEventListener("submit", async e => {
   e.preventDefault(); const k = $("apiKey").value.trim(); if (!k) return;
