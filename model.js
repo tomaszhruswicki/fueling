@@ -208,6 +208,12 @@ export const parseHM = s => { const [h, m] = String(s || "0:0").split(":").map(N
 
 const ROLE_RANK = { pre: 6, recovery: 5, presnack: 4, breakfast: 3, dinner: 2, meal: 1 };
 
+// Równy podział: śniadanie 30 min po pobudce, kolacja 3 h przed snem.
+export function evenTimes(wake, sleep, n) {
+  const N = Math.max(2, Math.min(7, Math.round(n || 4))), first = wake + 30, last = sleep - 180, step = (last - first) / (N - 1);
+  return Array.from({ length: N }, (_, i) => Math.round((first + i * step) / 5) * 5);
+}
+
 export function buildTimeline(sessions, opt) {
   const W = opt.wake, Bt = opt.sleep;
   const ss = sessions.filter(s => !s.off).slice().sort((a, b) => a.start - b.start);
@@ -215,12 +221,14 @@ export function buildTimeline(sessions, opt) {
   const add = (t, role, kind, s) => meals.push({ t: Math.round(t), role, kind, s: s ? s.id : null, sess: s || null });
 
   // 1. Posiłki bazowe (ustawienie): równo od śniadania do kolacji 3 h przed snem. Przy 5+ co drugi to przekąska.
-  const N = Math.max(2, Math.min(7, Math.round(opt.meals || 4)));
-  const first = W + 30, dinnerT = Bt - 180, step = (dinnerT - first) / (N - 1);
-  for (let i = 0; i < N; i++) {
-    const role = i === 0 ? "breakfast" : i === N - 1 ? "dinner" : "meal";
-    add(first + i * step, role, N >= 5 && i % 2 === 1 && i !== N - 1 ? "snack" : "main");
-  }
+  // Pory własne (dzień, dzień tygodnia, ustawienia) mają pierwszeństwo przed równym podziałem.
+  const times = (opt.times && opt.times.length ? opt.times.slice() : evenTimes(W, Bt, opt.meals)).sort((a, b) => a - b);
+  const N = times.length;
+  const step = N > 1 ? (times[N - 1] - times[0]) / (N - 1) : 240;
+  times.forEach((t, i) => {
+    const role = i === 0 && t < 11 * 60 ? "breakfast" : i === N - 1 && N > 1 && t >= 17 * 60 ? "dinner" : "meal";
+    add(t, role, N >= 5 && i % 2 === 1 && i !== N - 1 ? "snack" : "main");
+  });
   // 2. Trening przejmuje najbliższe posiłki bazowe (przed i po), a brakujące dokłada.
   const free = m => !m.sess;
   ss.forEach((s, i) => {
@@ -319,9 +327,9 @@ export function planDay(day, ctx) {
   const intra = act.reduce((a, s) => a + (s.intra || 0), 0);
   const maint = v.base + train;
   const P = v.prot * v.mass, F = v.fat * v.mass;
-  const minMain = v.minMeal || suggestMinMeal(v.base, v.meals), minSnack = 150;
+  const minMain = v.minMeal || suggestMinMeal(v.base, ctx.times && ctx.times.length ? ctx.times.length : v.meals), minSnack = 150;
   const isTraining = m => ["pre", "presnack", "recovery"].includes(m.role);
-  let meals = buildTimeline(act, { wake: v.wake, sleep: v.sleep, meals: v.meals }).map(m => ({ ...m }));
+  let meals = buildTimeline(act, { wake: v.wake, sleep: v.sleep, meals: v.meals, times: ctx.times }).map(m => ({ ...m }));
   let res = null;
   for (let iter = 0; iter < 5; iter++) {
     res = allocate(meals.map(m => ({ ...m })));

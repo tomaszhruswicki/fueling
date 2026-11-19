@@ -190,3 +190,13 @@ details summary{cursor:pointer}
 .sess input[type=time]{-webkit-appearance:none;appearance:none;min-width:0;width:auto;min-height:32px}
 .fields input::placeholder{color:var(--muted);opacity:.75}
 .fields label{grid-template-rows:1fr auto}
+.sub{font-size:.92rem;margin-top:4px}
+.tabsdow button{padding:7px 8px;font-size:.8rem}
+.trows{display:grid;gap:6px}
+.trow{display:grid;grid-template-columns:22px 1fr 36px;gap:8px;align-items:center}
+.trow input{font:500 1rem var(--f);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%;min-width:0;-webkit-appearance:none;appearance:none;text-align:left;min-height:40px}
+.trow .x{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;width:34px;height:34px;font-size:1.1rem;cursor:pointer}
+.trow .x[disabled]{opacity:.35}
+#dayTimesBox summary{list-style:none}
+#dayTimesBox summary::-webkit-details-marker{display:none}
+#dayTimesBox[open] summary{margin-bottom:8px}

@@ -22,7 +22,7 @@ const MODES = { normal: "Normalnie", hp: "High performance", tired: "Zmęczenie"
 
 const DEF = { meals: 4, minMeal: null, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, weekly: 700, cap: 150, hpCarb: 1.0 };
 let S = {
-  settings: { ...DEF }, modes: [], ov: { off: {}, skip: {}, time: {}, prio: {} },
+  settings: { ...DEF }, modes: [], ov: { off: {}, skip: {}, time: {}, prio: {}, mealTimes: {} },
   cache: { events: [], wellness: [], athlete: null, fetchedAt: null, sig: null, changes: null },
   exp: {}, savedAt: 0, view: "day", sel: null, week: 0, logDate: null, modeScope: "day",
 };
@@ -34,7 +34,7 @@ const setKey = k => { try { k ? localStorage.setItem(LSK, k) : localStorage.remo
 function load() {
   try {
     const x = JSON.parse(localStorage.getItem(LS) || "null"); if (!x) return;
-    S.settings = { ...DEF, ...(x.settings || {}) }; S.modes = x.modes || []; S.ov = { off: {}, skip: {}, time: {}, prio: {}, ...(x.ov || {}) };
+    S.settings = { ...DEF, ...(x.settings || {}) }; S.modes = x.modes || []; S.ov = { off: {}, skip: {}, time: {}, prio: {}, mealTimes: {}, ...(x.ov || {}) };
     S.cache = { ...S.cache, ...(x.cache || {}) }; S.exp = x.exp || {}; S.savedAt = x.savedAt || 0;
   } catch (e) {}
 }
@@ -63,6 +63,7 @@ function backupPayload() { return { v: 1, savedAt: S.savedAt, settings: S.settin
 function pruneOv(ov) { // zostaw tylko ostatnie 120 dni nadpisań dat
   const cut = addDays(todayISO(), -120), o = JSON.parse(JSON.stringify(ov));
   Object.keys(o.skip || {}).forEach(d => { if (d < cut) delete o.skip[d]; });
+  Object.keys(o.mealTimes || {}).forEach(d => { if (d < cut) delete o.mealTimes[d]; });
   return o;
 }
 let backupId = null, backupBusy = false;
@@ -89,7 +90,7 @@ async function pullBackup() {
   const b = await findBackupId(true);
   if (!b || !b.data || !b.data.savedAt) return false;
   if (b.data.savedAt <= S.savedAt) return false;
-  S.settings = { ...DEF, ...(b.data.settings || {}) }; S.modes = b.data.modes || []; S.ov = { off: {}, skip: {}, time: {}, prio: {}, ...(b.data.ov || {}) };
+  S.settings = { ...DEF, ...(b.data.settings || {}) }; S.modes = b.data.modes || []; S.ov = { off: {}, skip: {}, time: {}, prio: {}, mealTimes: {}, ...(b.data.ov || {}) };
   S.savedAt = b.data.savedAt; persist(); return true;
 }
 
@@ -220,6 +221,33 @@ function dayTag(act) {
   const key = act.some(s => s.key), ride = act.some(s => s.ride || s.run), gym = act.some(s => s.gym), long = act.some(s => s.long);
   return key ? (long ? ["long", "Długo"] : ["key", "Jakość"]) : ride ? ["easy", "Lekko"] : gym ? ["gym", "Siła"] : ["rest", "Wolne"];
 }
+// ---------- Pory posiłków: dzień > dzień tygodnia > ustawienia > równy podział ----------
+const DOWN = ["niedziele", "poniedziałki", "wtorki", "środy", "czwartki", "piątki", "soboty"];
+const tStr = m => M.fmtTime(m);
+const sortT = list => list.filter(Boolean).map(M.parseHM).sort((a, b) => a - b).map(tStr);
+function autoTimes(v) { return M.evenTimes(v.wake, v.sleep, S.settings.meals).map(tStr); }
+function timesFor(date, v) {
+  const dow = parseD(date).getDay(), st = S.settings;
+  if (S.ov.mealTimes && S.ov.mealTimes[date]) return { list: S.ov.mealTimes[date], src: "tylko ten dzień", lvl: "day" };
+  if (st.dowTimes && st.dowTimes[dow]) return { list: st.dowTimes[dow], src: `ustawienia na ${DOWN[dow]}`, lvl: "dow" };
+  if (st.mealTimes) return { list: st.mealTimes, src: "Twoje domyślne", lvl: "def" };
+  return { list: autoTimes(v), src: "automatycznie z pobudki i snu", lvl: "auto" };
+}
+// Edytor listy godzin. onSet(lista) zapisuje, onReset usuwa nadpisanie.
+function timesEditor(el, list, onSet, onReset, resetLabel) {
+  el.innerHTML = `<div class="trows">${list.map((t, i) => `<div class="trow"><span class="muted small">${i + 1}.</span><input type="time" value="${tStr(M.parseHM(t)).padStart(5, "0")}" data-ti="${i}" aria-label="Posiłek ${i + 1}"><button type="button" class="x" data-tx="${i}" aria-label="Usuń posiłek ${i + 1}" ${list.length <= 2 ? "disabled" : ""}>×</button></div>`).join("")}</div>
+    <div class="row"><button type="button" class="btn" data-tadd ${list.length >= 7 ? "disabled" : ""}>+ posiłek</button>${onReset ? `<button type="button" class="btn" data-treset>${resetLabel}</button>` : ""}</div>`;
+  el.querySelectorAll("[data-ti]").forEach(inp => inp.onchange = () => { if (!inp.value) return; const l = list.slice(); l[+inp.dataset.ti] = inp.value.replace(/^0(\d)/, "$1"); onSet(sortT(l)); });
+  el.querySelectorAll("[data-tx]").forEach(b => b.onclick = () => { const l = list.slice(); l.splice(+b.dataset.tx, 1); onSet(sortT(l)); });
+  const add = el.querySelector("[data-tadd]"); if (add) add.onclick = () => {
+    const m = list.map(M.parseHM); let best = 0, at = m[m.length - 1] + 120;
+    for (let i = 0; i + 1 < m.length; i++) if (m[i + 1] - m[i] > best) { best = m[i + 1] - m[i]; at = (m[i] + m[i + 1]) / 2; }
+    if (m.length < 2 || best < 150) at = Math.min(m[m.length - 1] + 120, 23 * 60);
+    onSet(sortT([...list, tStr(Math.round(at / 15) * 15)]));
+  };
+  const rs = el.querySelector("[data-treset]"); if (rs) rs.onclick = onReset;
+}
+
 function computeRange(start, n) {
   const v = eff();
   const days = [];
@@ -238,7 +266,8 @@ function computeRange(start, n) {
     const tired = d.mode === "tired";
     d.want = d.allowed ? Math.min(tired ? Math.min(150, v.cap) : v.cap, (tired ? v.weekly / 2 : v.weekly) / Math.max(1, n2)) : 0;
     d.want = Math.min(d.want, Math.max(0, v.base - v.floor)); // minimum dnia: część poza treningiem nie schodzi poniżej progu
-    d.plan = M.planDay({ sessions: d.ss }, { settings: v, tomorrowKey: d.tomorrowKey, tomorrowLong: d.tomorrowLong, deficit: d.want, hp: d.mode === "hp", loadKg: d.loadKg });
+    d.times = timesFor(d.date, v);
+    d.plan = M.planDay({ sessions: d.ss }, { settings: v, times: d.times.list.map(M.parseHM), tomorrowKey: d.tomorrowKey, tomorrowLong: d.tomorrowLong, deficit: d.want, hp: d.mode === "hp", loadKg: d.loadKg });
     const [tag, tagLabel] = dayTag(d.act); d.tag = tag; d.tagLabel = tagLabel;
     d.notes = notesFor(d.date);
   });
@@ -371,10 +400,19 @@ function renderDay() {
     <div class="seg" role="group" aria-label="Tryb dnia">${Object.entries(MODES).map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${mode === k}">${l === "High performance" ? "HP" : l}</button>`).join("")}</div>
     ${v.cutOn && !d.tomorrowKey && mode !== "sick" ? `<label class="check small"><input type="checkbox" id="skipDay" ${S.ov.skip[d.date] ? "checked" : ""}> bez deficytu w tym dniu</label>` : ""}
   </div>
+  <details class="card" id="dayTimesBox" ${S.openTimes ? "open" : ""}><summary><b>Pory posiłków</b> <span class="small muted">· ${esc(d.times.src)}</span></summary>
+    <div id="dayTimes"></div>
+    <p class="small muted">Zmiana tutaj dotyczy tylko ${dnum(d.date)}. Posiłki przy treningu dopasowują się same: najbliższy przed treningiem staje się posiłkiem przed, pierwszy po treningu regeneracją.</p>
+    <div class="row"><button type="button" class="btn" id="timesToDow">Ustaw te pory na wszystkie ${DOWN[dt.getDay()]}</button></div>
+  </details>
   <div class="card"><h2>Plan dnia</h2>${d.ss.length || p.meals.length ? `<div class="tl">${tl}</div>` : ""}
     <div class="between-water">Między posiłkami dopij ok. ${lfmt(p.fluids.between)} wody.</div>
     <div class="row between"><span class="small muted" id="dayEx">${exLine(d)}</span><button class="btn" type="button" id="exDay">${S.exp[d.date] ? "Zaktualizuj w Intervals" : "Wyślij dzień do Intervals"}</button></div>
   </div>`;
+  $("dayTimesBox").ontoggle = e => { S.openTimes = e.target.open; };
+  timesEditor($("dayTimes"), d.times.list, l => { S.ov.mealTimes[d.date] = l; S.openTimes = true; changed(); render(); },
+    d.times.lvl === "day" ? () => { delete S.ov.mealTimes[d.date]; changed(); render(); } : null, "Przywróć");
+  $("timesToDow").onclick = () => { const dow = dt.getDay(); S.settings.dowTimes = { ...(S.settings.dowTimes || {}), [dow]: d.times.list.slice() }; delete S.ov.mealTimes[d.date]; changed(); setRendered = false; render(); };
   document.querySelectorAll("#dayView [data-mode]").forEach(b => b.onclick = () => setMode(d.date, b.dataset.mode, S.modeScope));
   $("modeScope").onchange = e => { S.modeScope = e.target.value; };
   const sk = $("skipDay"); if (sk) sk.onchange = () => { if (sk.checked) S.ov.skip[d.date] = true; else delete S.ov.skip[d.date]; changed(); render(); };
@@ -531,6 +569,23 @@ $("logForm").addEventListener("submit", async e => {
 });
 
 // ---------- Ustawienia ----------
+function renderTimesSet() {
+  const v = eff(), tab = S.timesTab || "def", st = S.settings;
+  const tabs = [["def", "Domyślnie"], ["1", "Pn"], ["2", "Wt"], ["3", "Śr"], ["4", "Cz"], ["5", "Pt"], ["6", "Sb"], ["0", "Nd"]];
+  $("timesTabs").innerHTML = tabs.map(([k, l]) => `<button type="button" data-ttab="${k}" aria-pressed="${tab === k}">${l}${k !== "def" && st.dowTimes && st.dowTimes[k] ? "•" : ""}</button>`).join("");
+  document.querySelectorAll("[data-ttab]").forEach(b => b.onclick = () => { S.timesTab = b.dataset.ttab; renderTimesSet(); });
+  if (tab === "def") {
+    const list = st.mealTimes || autoTimes(v);
+    $("timesNote").textContent = st.mealTimes ? "Twoje domyślne pory. Dni tygodnia bez własnych pór biorą je stąd." : `Teraz automatycznie: ${st.meals || 4} posiłki od pobudki do kolacji 3 h przed snem. Zmień dowolną porę, żeby zapisać własne.`;
+    timesEditor($("timesEdit"), list, l => { S.settings.mealTimes = l; changed(); render(); }, st.mealTimes ? () => { S.settings.mealTimes = null; changed(); render(); } : null, "Wróć do automatycznych");
+  } else {
+    const own = st.dowTimes && st.dowTimes[tab];
+    const list = own || st.mealTimes || autoTimes(v);
+    $("timesNote").textContent = own ? `Własne pory na ${DOWN[+tab]}.` : `Na ${DOWN[+tab]} jak domyślnie. Zmień porę, żeby ustawić własne dla tego dnia tygodnia.`;
+    timesEditor($("timesEdit"), list, l => { S.settings.dowTimes = { ...(st.dowTimes || {}), [tab]: l }; changed(); render(); },
+      own ? () => { const o = { ...(st.dowTimes || {}) }; delete o[tab]; S.settings.dowTimes = o; changed(); render(); } : null, "Jak domyślnie");
+  }
+}
 function renderMaint() {
   const m = maintenance(), s = S.settings;
   const rows = [
@@ -587,6 +642,7 @@ function renderSettings() {
   $("cutOn").checked = !!S.settings.cutOn;
   $("setNote").textContent = `Puste pola biorą wartości z Intervals albo domyślne. Teraz liczę z: masa ${fmt(eff().mass)} kg, FTP ${eff().ftp} W.`;
   renderMaint();
+  renderTimesSet();
   const hist = S.modes.slice().sort((a, b) => b.at - a.at).slice(0, 30);
   $("modeHist").innerHTML = hist.length ? hist.map(e => `<div><span>${e.end ? "Koniec trybu" : MODES[e.mode]} · ${dnum(e.from)}${e.to && e.to !== e.from ? "–" + dnum(e.to) : e.to ? "" : " → do odwołania"}${e.cancelled ? " · anulowano" : ""}</span><button class="x" type="button" data-delmode="${e.id}" aria-label="Usuń wpis">×</button></div>`).join("") : `<p class="small muted">Brak wpisów. Tryb ustawiasz w widoku Dzień.</p>`;
   document.querySelectorAll("[data-delmode]").forEach(b => b.onclick = () => { S.modes = S.modes.filter(e => String(e.id) !== b.dataset.delmode); changed(); render(); });
@@ -608,7 +664,7 @@ $("exportSet").onclick = () => {
 };
 $("importSet").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
-  try { const x = JSON.parse(await f.text()); if (!x || x.v !== 1) throw new Error("format"); S.settings = { ...DEF, ...(x.settings || {}) }; S.modes = x.modes || []; S.ov = { off: {}, skip: {}, time: {}, prio: {}, ...(x.ov || {}) }; changed(); setRendered = false; render(); $("setStatus").textContent = "Wczytano ustawienia."; }
+  try { const x = JSON.parse(await f.text()); if (!x || x.v !== 1) throw new Error("format"); S.settings = { ...DEF, ...(x.settings || {}) }; S.modes = x.modes || []; S.ov = { off: {}, skip: {}, time: {}, prio: {}, mealTimes: {}, ...(x.ov || {}) }; changed(); setRendered = false; render(); $("setStatus").textContent = "Wczytano ustawienia."; }
   catch (err) { $("setStatus").textContent = "To nie jest plik ustawień tej aplikacji."; }
 };
 let wipeArm = null;
