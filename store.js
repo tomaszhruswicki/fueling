@@ -2,7 +2,7 @@
 const LS = "fueling.v1", LSK = "fueling.key";
 
 export const MODES = { normal: "Normalnie", hp: "High performance", tired: "Zmęczenie", sick: "Choroba" };
-export const DEF = { meals: 4, minMeal: null, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, cutLow: 400, recomp: false, hpCarb: 1.0 };
+export const DEF = { meals: 4, minMeal: null, mass: null, base: null, baseMode: "auto", height: null, age: null, bodyFat: null, floor: null, prot: 2.0, fat: 0.9, ftp: null, wake: "6:30", sleep: "22:30", wkTime: "17:00", weTime: "09:00", sweat: 0.9, sodium: 700, cutOn: false, cutLow: 400, recomp: false, gain: 0, hpCarb: 1.0 };
 export const normOv = ov => ({ off: {}, skip: {}, time: {}, prio: {}, mealTimes: {}, ...(ov || {}) });
 
 export const S = {

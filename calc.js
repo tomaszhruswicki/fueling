@@ -108,8 +108,9 @@ export const calibrationInfo = () => { calibration(S.settings.mass || 75); retur
 export function eff() {
   const a = S.cache.athlete || {}, s = S.settings, m = maintenance();
   const ffm = s.bodyFat ? m.mass * (1 - s.bodyFat / 100) : 0.85 * m.mass; // bez pomiaru: 85% masy ciała
-  const cutOn = !!s.cutOn && s.cutLow > 0, recomp = cutOn && !!s.recomp;
-  return { ...s, cutOn, recomp, prot: recomp ? Math.max(s.prot || 2, M.RECOMP_PROT) : s.prot, mass: m.mass, ftp: s.ftp || a.ftp || 250, zones: a.zones || [55, 75, 90, 105, 120, 150, 999], base: m.base, floor: m.floor, wake: M.parseHM(s.wake), sleep: M.parseHM(s.sleep),
+  const cutOn = !!s.cutOn && s.cutLow > 0, recomp = cutOn && !!s.recomp, gain = cutOn ? 0 : Math.max(0, Math.min(M.GAIN_MAX, +s.gain || 0));
+  const prot = recomp ? Math.max(s.prot || 2, M.RECOMP_PROT) : gain ? Math.max(s.prot || 2, M.GAIN_MIN_PROT) : s.prot;
+  return { ...s, cutOn, recomp, gain, prot, mass: m.mass, ftp: s.ftp || a.ftp || 250, zones: a.zones || [55, 75, 90, 105, 120, 150, 999], base: m.base, floor: m.floor, wake: M.parseHM(s.wake), sleep: M.parseHM(s.sleep),
     runSpeed: runSpeed(), ffm, ffmMeasured: !!s.bodyFat, eaMin: r10(EA_MIN_KG_FFM * ffm), m };
 }
 
@@ -191,14 +192,16 @@ export function timesFor(date, v) {
 export function computeRange(start, n) {
   const v = eff(), t = todayISO(), now = nowMin();
   const days = [];
-  for (let i = 0; i < n + 2; i++) {
+  for (let i = -1; i < n + 2; i++) {
     const date = addDays(start, i), withDone = date <= t;
     const ss = sessionsFor(date, v, withDone);
     days.push({ date, ss, act: ss.filter(s => !s.off), mode: modeFor(date), planned: withDone ? sessionsFor(date, v) : null });
   }
+  const prev = days.shift(); // dzień przed zakresem: tylko do „dzień po siłowni”
   const show = days.slice(0, n);
   const prof = stepProfile(v), lim = M.cutLimits(v.cutOn ? v.cutLow : 0);
   if (v.recomp) lim.label = "Rekompozycja";
+  if (v.gain) lim.label = v.gain === 200 ? "Budowa" : v.gain === 300 ? "Budowa+" : `Budowa (+${v.gain})`;
   const desk = baseAt(prof.rest, v.m); // dzień przy biurku: średnie kroki dni wolnych
   const trainOf = list => list.filter(s => !s.off).reduce((a, s) => a + s.kcal, 0);
   show.forEach((d, i) => {
@@ -216,10 +219,15 @@ export function computeRange(start, n) {
     d.aplus = !d.blocked && d.intensity === "high";
     const cut = list => d.blocked ? null : M.dayDeficit({ desk, full: d.base + trainOf(list), type: d.aplus ? "aplus" : d.intensity, lim, tired: d.mode === "tired", floor: v.floor });
     d.cut = cut(d.ss); d.want = d.cut ? d.cut.want : 0;
+    // Budowa: nadwyżka według typu dnia; bez niej w Chorobie, HP, przed startem, w ładowaniu i w dniu startu.
+    const prevAct = (i ? show[i - 1] : prev).act;
+    d.gym = d.act.some(s => s.gym); d.afterGym = prevAct.some(s => s.gym);
+    const gainBlocked = !v.gain || ["sick", "hp"].includes(d.mode) || !!d.loadKg || d.prio || t1.act.some(s => s.prio) || !!S.ov.skip[d.date];
+    d.gainKcal = gainBlocked ? 0 : M.gainFor({ gain: v.gain, type: d.intensity, gym: d.gym, afterGym: d.afterGym });
     d.times = timesFor(d.date, v);
     d.walks = walksOn(d.date);
     const walks = d.walks.map(a => ({ start: M.parseHM((a.start_date_local || "").slice(11, 16)), durMin: (+a.moving_time || +a.elapsed_time || 0) / 60 }));
-    const ctx = (want, aplus) => ({ settings: { ...v, base: d.base }, times: d.times.list.map(M.parseHM), tomorrowKey: d.tomorrowKey, tomorrowLong: d.tomorrowLong, deficit: want, aplus, eaMin: v.eaMin, hp: d.mode === "hp", loadKg: d.loadKg, walks });
+    const ctx = (want, aplus) => ({ settings: { ...v, base: d.base }, times: d.times.list.map(M.parseHM), tomorrowKey: d.tomorrowKey, tomorrowLong: d.tomorrowLong, deficit: want, aplus, eaMin: v.eaMin, hp: d.mode === "hp", loadKg: d.loadKg, walks, gain: d.gainKcal, bedtime: d.gainKcal > 0 && d.gym });
     d.done = d.ss.filter(s => s.done);
     d.plan = M.planDay({ sessions: d.ss }, ctx(d.want, d.aplus));
     if (d.date <= t && (d.done.length || d.ss.some(s => s.missed))) {

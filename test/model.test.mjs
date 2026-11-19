@@ -338,3 +338,37 @@ test("suwak: deficyt rośnie z wartością, dzień wolny w rekompozycji maks. 16
   for (let x = 0; x <= 600; x += 50) { const w = M.dayDeficit({ desk: DESK, full: DESK + 500, type: "low", lim: M.cutLimits(x) }).want; assert.ok(w >= prev); prev = w; }
   assert.equal(M.dayDeficit({ desk: DESK, full: DESK + 300, type: "rest", lim: M.cutLimits(250) }).want, 160);
 });
+
+// ---------- Budowa (nadwyżka) ----------
+test("budowa: udziały typu dnia", () => {
+  assert.equal(M.gainFor({ gain: 200, type: "mid", gym: true }), 200);
+  assert.equal(M.gainFor({ gain: 200, type: "rest", afterGym: true }), 100);
+  assert.equal(M.gainFor({ gain: 300, type: "high" }), 150);
+  assert.equal(M.gainFor({ gain: 300, type: "low" }), 80);
+  assert.equal(M.gainFor({ gain: 200, type: "rest" }), 0);
+  assert.equal(M.gainFor({ gain: 0, type: "mid", gym: true }), 0);
+});
+
+test("budowa: siłownia +300 w regeneracji i następnym posiłku, przekąska przed snem 30–40 g białka", () => {
+  const g = { ...M.analyzeSession(gym(80), cfg74), start: 12 * 60 };
+  const ctx = { settings: V2, times: null };
+  const a = M.planDay({ sessions: [g] }, ctx), b = M.planDay({ sessions: [g] }, { ...ctx, gain: 300, bedtime: true });
+  assert.ok(Math.abs(b.target - a.target - 300) < 2, "cel +300");
+  assert.ok(b.meals.find(m => m.role === "recovery").gain, "reszta w regeneracji");
+  assert.ok(Math.abs(sum(b.meals, "kcal") + 4 * b.intra - b.target) < 2, "posiłki = cel");
+  const bed = b.meals.find(m => m.role === "bedtime");
+  assert.ok(bed && bed.p >= 30 && bed.p <= 40 && bed.t > b.meals[b.meals.length - 2].t);
+  const rec = b.meals.find(m => m.role === "recovery");
+  assert.ok(rec.p >= 0.4 * MASS - 0.5);
+  const ra = a.meals.find(m => m.role === "recovery"); assert.ok(rec.c > ra.c, "więcej węgli w regeneracji");
+  assert.ok(b.fT - a.fT < 5, "nadwyżka nie idzie w tłuszcz");
+  a.meals.filter(m => m.role !== "recovery").forEach(o => { const m = b.meals.find(x => x.t === o.t); assert.ok(m.p >= o.p - 0.5, o.name + " bez utraty białka"); });
+});
+
+test("budowa: dzień po siłowni bez treningu, nadwyżka w dwóch pierwszych posiłkach, bez przekąski", () => {
+  const ctx = { settings: V2, times: null };
+  const a = M.planDay({ sessions: [] }, ctx), b = M.planDay({ sessions: [] }, { ...ctx, gain: 100 });
+  assert.ok(Math.abs(b.target - a.target - 100) < 2);
+  assert.ok(!b.meals.some(m => m.role === "bedtime"));
+  assert.deepEqual(b.meals.map(m => !!m.gain), [true, true, false, false]);
+});

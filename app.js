@@ -168,6 +168,12 @@ function liveNote(d) {
 }
 // Uzasadnienie deficytu dnia (spec 2026-11-20): jedzenie od dnia przy biurku, limit typu dnia, ograniczenia.
 function deficitWhy(d, p, v) {
+  if (v.gain) {
+    if (!d.gainKcal) return d.mode === "hp" || d.mode === "sick" || d.loadKg || d.prio ? "Budowa: bez nadwyżki w tym dniu." : `Budowa: dzień ${INT[d.intensity]} bez nadwyżki.`;
+    const why = d.gym ? "dzień z siłownią" : d.afterGym ? "dzień po siłowni" : `dzień ${INT[d.intensity]}`;
+    const where = [...p.meals.filter(m => m.gain).map(m => esc(m.name)), ...p.meals.filter(m => m.role === "bedtime").map(() => "przekąska przed snem (30–40 g białka)")];
+    return `Budowa: ${why}, +${r10(p.gain)} kcal${where.length ? ": " + where.join(", ") : ""}. Węgle i białko, nie tłuszcz; białko ${fmt(v.prot, 1)} g/kg.`;
+  }
   if (!v.cutOn) return "Bilans na zero.";
   if (S.ov.skip[d.date]) return "Deficyt wyłączony ręcznie na ten dzień.";
   if (d.tomorrowKey) return "Jutro mocny trening: dziś bez deficytu, żeby wejść w niego z pełnym zapasem.";
@@ -213,7 +219,7 @@ function renderDay() {
   <div class="card dayset">
     <div class="seg" role="group" aria-label="Tryb dnia">${Object.entries(MODES).map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${mode === k}">${l === "High performance" ? "HP" : l}</button>`).join("")}</div>
     <div class="setrow"><span class="small muted">Zmiana trybu</span><select id="modeScope" class="inl" aria-label="Zakres trybu"><option value="day" ${S.modeScope === "day" ? "selected" : ""}>tylko ten dzień</option><option value="period" ${S.modeScope === "period" ? "selected" : ""}>od tego dnia</option></select></div>
-    ${v.cutOn && !d.tomorrowKey && mode !== "sick" ? `<label class="setrow"><span class="small">Bez deficytu w tym dniu</span><input type="checkbox" class="sw" id="skipDay" ${S.ov.skip[d.date] ? "checked" : ""}></label>` : ""}
+    ${(v.cutOn && !d.tomorrowKey && mode !== "sick") || v.gain ? `<label class="setrow"><span class="small">${v.gain ? "Bez nadwyżki" : "Bez deficytu"} w tym dniu</span><input type="checkbox" class="sw" id="skipDay" ${S.ov.skip[d.date] ? "checked" : ""}></label>` : ""}
     <details id="dayTimesBox" ${S.openTimes ? "open" : ""}><summary class="setrow"><span class="small">Pory posiłków</span><span class="small muted">${esc(d.times.src)} ›</span></summary>
       <div class="timesbody">
         <div id="dayTimes"></div>
@@ -250,7 +256,7 @@ function renderWeek() {
     <div class="stat"><span>Średnio dziennie</span><b>${kfmt(sum(d => d.plan.target) / 7)} kcal</b></div>
     <div class="stat"><span>Węgle średnio</span><b>${fmt(sum(d => d.plan.cKg) / 7)} g/kg</b></div>
     <div class="stat"><span>Trening</span><b>${fmt(hrs, 1)} h · ${kfmt(kj)} kJ</b></div>
-    <div class="stat"><span>${surT > defT ? "Nadwyżka" : "Deficyt"} tygodnia</span><b>${surT > defT ? "+" + kfmt(surT) : defT ? "−" + kfmt(defT) : "0"} kcal</b>${v.cutOn && surT <= defT && defT ? `<small class="muted" style="display:block;font-weight:400">ok. ${fmt((defT - surT) / M.K.KCAL_PER_KG, 2)} kg/tydz. (${R.lim.label.toLowerCase()})</small>` : ""}</div>
+    <div class="stat"><span>${surT > defT ? "Nadwyżka" : "Deficyt"} tygodnia</span><b>${surT > defT ? "+" + kfmt(surT) : defT ? "−" + kfmt(defT) : "0"} kcal</b>${(v.cutOn && defT > surT) || (v.gain && surT > defT) ? `<small class="muted" style="display:block;font-weight:400">ok. ${surT > defT ? "+" : "−"}${fmt(Math.abs(defT - surT) / M.K.KCAL_PER_KG, 2)} kg/tydz. (${R.lim.label.toLowerCase()})</small>` : ""}</div>
   </div>`;
   $("weekRows").innerHTML = show.map(d => {
     const p = d.plan, base = v.base / max * 100, tr = Math.max(0, p.train) / max * 100, sp = p.surplus / max * 100, cut = p.def / max * 100;

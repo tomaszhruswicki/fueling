@@ -8,7 +8,7 @@ A1, A2, A3, A4, A5, A7, B1, B2, B3, B4 (bieg, spacery), C1. Szczegóły w `docs/
 
 ## Zrobione 20.11.2026
 
-Suwak redukcji 0–600 z punktami Utrzymanie, Rekompozycja, Lekki, Umiarkowany, Mocny. Deficyt v2: jedzenie od dnia przy biurku, kroki według typu dnia, spacer od 90 min chroni posiłki, rozdział posiłków z kodów i równej reszty, łączenie małych posiłków. Szczegóły w `docs/decyzje.md`.
+Suwak bilansu −600…+300 z punktami Mocny, Umiarkowany, Lekki, Rekompozycja, Utrzymanie, Budowa, Budowa+ (nadwyżka wokół siłowni, przekąska przed snem). Deficyt v2: jedzenie od dnia przy biurku, kroki według typu dnia, spacer od 90 min chroni posiłki, rozdział posiłków z kodów i równej reszty, łączenie małych posiłków. Szczegóły w `docs/decyzje.md`.
 
 ## Proponowana kolejność
 
@@ -33,7 +33,7 @@ Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 
 ## B. Porządek kodu
 
-1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 44 testy, `node --test`).
+1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 47 testów, `node --test`).
 2. ~~Podział `app.js`~~ Zrobione: `util`, `store`, `intervals`, `calc`, `log`, `settings`, `app`.
 3. ~~Stałe modelu w jednym miejscu~~ Zrobione: `K` w `model.js`. Krzywe udziału węglowodanów zostają przy funkcjach.
 4. **Wydatek siłowni i biegu stały** (280 kcal/h, 10 kcal/min) niezależnie od masy. Przeliczać przez masę ciała albo brać kJ/kcal z wykonanej aktywności. 30 min.

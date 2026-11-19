@@ -2,6 +2,13 @@
 
 Najnowsze na górze. Każda z datą i powodem, żeby nie otwierać ich ponownie bez nowego argumentu.
 
+## 20.11.2026: budowa (nadwyżka)
+
+- **Suwak bilansu od −600 do +300.** Prawa strona to nadwyżka w dzień z siłownią; punkty Budowa (+200) i Budowa+ (+300). Udziały: siłownia 100%, dzień po siłowni i mocny 50%, luźny i średni 25%, wolny 0. Powód: przyrost beztłuszczowej masy u wytrenowanych to ok. 0,25–0,5% masy na miesiąc, większa nadwyżka idzie w tłuszcz (Iraki i in. 2019, Garthe i in. 2013); synteza białek podwyższona do ok. 36 h po siłowni (MacDougall i in. 1995); u kolarza tłuszcz obniża W/kg.
+- **Gdzie nadwyżka:** najpierw przekąska przed snem w dzień siłowni (30–40 g białka, ok. 0,15 g/kg węgli; Snijders i in. 2015), dodatkowa ponad posiłki dnia, od +150 kcal i gdy ostatni posiłek jest min. 2 h przed snem. Reszta do regeneracji (siłowni, inaczej pierwszej) i następnego posiłku, 70% węgle i 30% białko; bez treningu do dwóch pierwszych posiłków. Przy +200 prawie całość idzie w przekąskę przed snem.
+- **Białko min. 2,0 g/kg, regeneracja min. 0,4 g/kg** (białko przesuwane z posiłków bez treningu, energia wyrównana tłuszczem).
+- **Bez nadwyżki:** Choroba, HP (ma własne węgle), ładowanie, dzień startu i dzień przed nim, ręczne wyłączenie dnia.
+
 ## 20.11.2026: suwak redukcji i rekompozycja
 
 - **Suwak zamiast trzech poziomów.** Jedna wartość: maks. deficyt dnia z luźnym treningiem, 0–600 kcal co 50. Punkty Lekki (400), Umiarkowany (500), Mocny (600) dają limity z tabeli v2, między nimi liniowo, poniżej 400 proporcjonalnie do lekkiego. 0 = utrzymanie (deficyt wyłączony). Powód: Tomasz chciał poziomów pośrednich; suwak daje je bez nowych tabel. Starsze ustawienia przechodzą automatycznie (lekki 400, umiarkowany 500, mocny 600, własny według wpisanej wartości).

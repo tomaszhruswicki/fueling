@@ -104,34 +104,43 @@ export function renderSettings() {
   $("keyStatus").textContent = getKey() ? "Klucz zapisany na tym urządzeniu." : "Brak klucza.";
 }
 
-// ---------- Redukcja: suwak z punktami (spec 2026-11-20) ----------
-const cutInfo = x => {
-  const L = M.cutLimits(x);
-  return x ? `Wolny do ${L.rest}, luźny do ${L.low}, średni do ${S.settings.recomp ? L.mid + " (siłownia 0)" : L.mid}, mocny 0 kcal.` : "Bilans na zero każdego dnia.";
+// ---------- Bilans: suwak −600 … +300 z punktami (spec 2026-11-20) ----------
+// Lewa strona: maks. deficyt dnia z luźnym treningiem. Prawa: nadwyżka dnia z siłownią (Budowa).
+const balOf = st => st.cutOn && st.cutLow > 0 ? -st.cutLow : Math.max(0, +st.gain || 0);
+const balTxt = b => b < 0 ? `deficyt do ${-b} kcal w dzień z luźnym treningiem` : b > 0 ? `nadwyżka +${b} kcal w dzień z siłownią` : "0 (utrzymanie)";
+const cutInfo = b => {
+  if (b > 0) { const g = x => M.gainFor({ gain: b, ...x }); return `Siłownia +${g({ type: "mid", gym: true })}, dzień po siłowni i mocny +${g({ type: "high" })}, luźny i średni +${g({ type: "low" })}, wolny 0. W dzień siłowni przekąska przed snem z 30–40 g białka; białko min. ${fmt(M.GAIN_MIN_PROT, 1)} g/kg.`; }
+  if (!b) return "Bilans na zero każdego dnia.";
+  const L = M.cutLimits(-b);
+  return `Wolny do ${L.rest}, luźny do ${L.low}, średni do ${S.settings.recomp ? L.mid + " (siłownia 0)" : L.mid}, mocny 0 kcal.`;
 };
 function weekTempo() {
   const t = todayISO(), mon = addDays(t, -((parseD(t).getDay() + 6) % 7));
   const show = computeRange(mon, 7).show, net = show.reduce((a, d) => a + d.plan.def - d.plan.surplus, 0);
-  return net > 0 ? `Ten tydzień: −${kfmt(net)} kcal, ok. ${fmt(net / M.K.KCAL_PER_KG, 2)} kg/tydz.` : "";
+  if (Math.abs(net) < 20) return "";
+  return `Ten tydzień: ${net > 0 ? "−" : "+"}${kfmt(Math.abs(net))} kcal, ok. ${net > 0 ? "−" : "+"}${fmt(Math.abs(net) / M.K.KCAL_PER_KG, 2)} kg/tydz.`;
 }
 function renderCut() {
-  const st = S.settings, x = st.cutOn ? st.cutLow : 0, rc = st.cutOn && !!st.recomp;
-  const pressed = p => p.recomp ? rc && x === p.low : !rc && x === p.low;
+  const st = S.settings, b = balOf(st), rc = b < 0 && !!st.recomp;
+  const pressed = p => p.recomp ? rc && b === p.bal : !(rc && p.bal < 0) && b === p.bal;
   $("cutBox").innerHTML = `<div class="cutbox">
-    <div class="row" role="group" aria-label="Poziom redukcji">${M.CUT_PRESETS.map(p => `<button type="button" class="btn" data-preset="${p.key}" aria-pressed="${pressed(p)}">${p.label}</button>`).join("")}</div>
-    <label class="small" for="cutLow">Maks. deficyt dnia z luźnym treningiem: <b id="cutVal">${x ? x + " kcal" : "0 (utrzymanie)"}</b></label>
-    <input type="range" id="cutLow" min="0" max="${M.CUT_MAX}" step="${M.CUT_STEP}" value="${x}">
-    <div class="ticks"><span>0</span><span>200</span><span>400</span><span>600</span></div>
-    <p class="small muted" id="cutInfo">${cutInfo(x)}</p>
-    ${x ? `<label class="check"><input type="checkbox" id="recomp" ${rc ? "checked" : ""}> Rekompozycja: siłownia i mocne dni na zero, białko min. ${fmt(M.RECOMP_PROT, 1)} g/kg</label>` : ""}
-    ${x ? `<p class="small muted">${weekTempo()}</p>` : ""}
+    <div class="row" role="group" aria-label="Bilans">${M.CUT_PRESETS.map(p => `<button type="button" class="btn" data-preset="${p.key}" aria-pressed="${pressed(p)}">${p.label}</button>`).join("")}</div>
+    <label class="small" for="cutLow">Bilans: <b id="cutVal">${balTxt(b)}</b></label>
+    <input type="range" id="cutLow" min="${-M.CUT_MAX}" max="${M.GAIN_MAX}" step="${M.CUT_STEP}" value="${b}">
+    <div class="ticks"><span>−600</span><span>−300</span><span>0</span><span>+300</span></div>
+    <p class="small muted" id="cutInfo">${cutInfo(b)}</p>
+    ${b < 0 ? `<label class="check"><input type="checkbox" id="recomp" ${rc ? "checked" : ""}> Rekompozycja: siłownia i mocne dni na zero, białko min. ${fmt(M.RECOMP_PROT, 1)} g/kg</label>` : ""}
+    ${b ? `<p class="small muted">${weekTempo()}</p>` : ""}
   </div>`;
-  const set = (low, recomp) => { st.cutLow = low; st.cutOn = low > 0; if (recomp != null) st.recomp = recomp; changed(); render(); };
-  document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { const p = M.CUT_PRESETS.find(q => q.key === b.dataset.preset); set(p.low, !!p.recomp); });
+  const set = (bal, recomp) => {
+    if (bal < 0) { st.cutOn = true; st.cutLow = -bal; st.gain = 0; } else { st.cutOn = false; st.gain = bal; }
+    if (recomp != null) st.recomp = recomp; changed(); render();
+  };
+  document.querySelectorAll("[data-preset]").forEach(x => x.onclick = () => { const p = M.CUT_PRESETS.find(q => q.key === x.dataset.preset); set(p.bal, !!p.recomp); });
   const r = $("cutLow");
-  r.oninput = () => { const v = +r.value; $("cutVal").textContent = v ? v + " kcal" : "0 (utrzymanie)"; $("cutInfo").textContent = cutInfo(v); };
+  r.oninput = () => { const v = +r.value; $("cutVal").textContent = balTxt(v); $("cutInfo").textContent = cutInfo(v); };
   r.onchange = () => set(+r.value, null);
-  const rcb = $("recomp"); if (rcb) rcb.onchange = () => set(st.cutLow, rcb.checked);
+  const rcb = $("recomp"); if (rcb) rcb.onchange = () => set(b, rcb.checked);
 }
 
 export function initSettings(refresh, setSync) {

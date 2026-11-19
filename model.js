@@ -35,20 +35,31 @@ export const CUT_LEVELS = {
 // Suwak: maks. deficyt dnia luźnego 0–600 kcal. Na punktach 400/500/600 limity z tabeli Tomasza, między nimi
 // liniowo, poniżej 400 proporcjonalnie do poziomu lekkiego. 0 = utrzymanie.
 export const CUT_MAX = 600, CUT_STEP = 50;
+// Punkty suwaka bilansu (−600 … +300): ujemne = maks. deficyt dnia luźnego, dodatnie = nadwyżka dnia z siłownią.
 export const CUT_PRESETS = [
-  { key: "maint", label: "Utrzymanie", low: 0 },
-  { key: "recomp", label: "Rekompozycja", low: 250, recomp: true },
-  { key: "light", label: "Lekki", low: 400 },
-  { key: "mid", label: "Umiarkowany", low: 500 },
-  { key: "strong", label: "Mocny", low: 600 },
+  { key: "strong", label: "Mocny", low: 600, bal: -600 },
+  { key: "mid", label: "Umiarkowany", low: 500, bal: -500 },
+  { key: "light", label: "Lekki", low: 400, bal: -400 },
+  { key: "recomp", label: "Rekompozycja", low: 250, bal: -250, recomp: true },
+  { key: "maint", label: "Utrzymanie", low: 0, bal: 0 },
+  { key: "gain", label: "Budowa", bal: 200 },
+  { key: "gain2", label: "Budowa+", bal: 300 },
 ];
+export const GAIN_MAX = 300, GAIN_MIN_PROT = 2.0, REC_PROT_KG = 0.4;
+// Budowa (spec 2026-11-20, nadwyżka): wartość suwaka = nadwyżka dnia z siłownią; inne dni ułamek.
+export const GAIN_SHARE = { gym: 1, afterGym: 0.5, high: 0.5, mid: 0.25, low: 0.25, rest: 0 };
+export function gainFor({ gain, type, gym, afterGym }) {
+  if (!(gain > 0)) return 0;
+  const f = Math.max(gym ? GAIN_SHARE.gym : 0, afterGym ? GAIN_SHARE.afterGym : 0, GAIN_SHARE[type] || 0);
+  return Math.round(gain * f / 10) * 10;
+}
 export const RECOMP_PROT = 2.2; // g/kg, minimum białka w rekompozycji (Helms i in. 2014)
 export function cutLimits(lowMax) {
   const x = Math.max(0, Math.min(CUT_MAX, +lowMax || 0)), r = n => Math.round(n / 10) * 10;
   const A = [{ low: 0, rest: 0, mid: 0 }, CUT_LEVELS.light, CUT_LEVELS.mid, CUT_LEVELS.strong];
   let i = 1; while (i < A.length - 1 && x > A[i].low) i++;
   const lo = A[i - 1], hi = A[i], t = (x - lo.low) / (hi.low - lo.low);
-  const p = CUT_PRESETS.find(q => q.low === x && !q.recomp);
+  const p = CUT_PRESETS.find(q => q.bal === -x && !q.recomp);
   return { label: p ? p.label : `Własny (${x})`, low: x, rest: r(lo.rest + (hi.rest - lo.rest) * t), mid: r(lo.mid + (hi.mid - lo.mid) * t), high: 0 };
 }
 // type: rest | low | mid | high | aplus. desk: utrzymanie dnia przy biurku (średnie kroki dni wolnych),
@@ -562,14 +573,46 @@ export function planDay(day, ctx) {
       cands.forEach(m => { delete m.k0; });
       if (left > 5 && !cutLimit) cutLimit = "meals";
     }
+    const gain = applyGain(meals, act, ctx, v, kc);
     mergeSmall(meals, act, kc);
     const cT = meals.reduce((a, m) => a + m.c, 0) + intra, pT = meals.reduce((a, m) => a + m.p, 0), fT = meals.reduce((a, m) => a + m.f, 0);
     return {
-      meals, maint, train, intra, def, surplus, target: maint - def + surplus, cT, pT, fT, band, minMain, cutLimit, wantDef: ctx.deficit || 0,
+      meals, maint, train, intra, def, surplus: surplus + gain, gain, target: maint - def + surplus + gain, cT, pT, fT, band, minMain, cutLimit, wantDef: ctx.deficit || 0,
       cKg: cT / v.mass, low: cT / v.mass < band.lo - 0.05, loadKg: ctx.loadKg || 0, hp: !!ctx.hp,
       fluids: { meals: mealMl, intra: intraMl, between: betweenMl, total: mealMl + intraMl + betweenMl },
     };
   }
+}
+
+// Nadwyżka dnia (tryb Budowa): do regeneracji po siłowni (albo po treningu) i następnego posiłku, 70% węgle,
+// 30% białko; bez treningu do dwóch pierwszych posiłków głównych. W dzień siłowni przekąska przed snem z 30–40 g
+// białka (Snijders i in. 2015), z nadwyżki; reszta do regeneracji i następnego posiłku.
+// Regeneracja dostaje min. 0,4 g/kg białka.
+export function applyGain(meals, act, ctx, v, kc) {
+  const G = ctx.gain || 0; if (G <= 0) return 0;
+  const isTr = m => ["pre", "presnack", "recovery"].includes(m.role);
+  const k0 = meals.reduce((a, m) => a + m.kcal, 0);
+  let left = G;
+  // Przekąska przed snem: dodatkowe białko z nadwyżki (od +150 kcal), posiłki dnia bez zmian.
+  if (ctx.bedtime && G >= 150 && meals.length && meals[meals.length - 1].t <= v.sleep - 120) {
+    const b = { t: Math.round(v.sleep - 45), role: "bedtime", kind: "snack", code: "L", name: "Przed snem (białko)", p: Math.max(30, Math.min(40, 0.45 * v.mass)), c: 0.15 * v.mass, f: 3, ml: 250, s: null, sess: null };
+    b.kcal = kc(b); left -= b.kcal; meals.push(b);
+  }
+  const rec = meals.filter(m => m.role === "recovery"), gymRec = rec.find(m => m.sess && m.sess.gym) || rec[0];
+  let tgt;
+  if (gymRec) { const i = meals.indexOf(gymRec), nx = meals.slice(i + 1).find(m => m.kind === "main" && m.role !== "bedtime"); tgt = nx ? [gymRec, nx] : [gymRec]; }
+  else tgt = meals.filter(m => m.kind === "main").slice(0, 2);
+  if (left > 5 && tgt.length) tgt.forEach(m => { const e = left / tgt.length; m.c += 0.7 * e / 4; m.p += 0.3 * e / 4; m.gain = true; m.kcal = kc(m); });
+  // Regeneracja: min. 0,4 g/kg białka; białko z posiłków bez treningu, energia wyrównana tłuszczem.
+  rec.forEach(r => {
+    const need = REC_PROT_KG * v.mass - r.p; if (need <= 0.5) return;
+    const donors = meals.filter(m => !isTr(m) && m.role !== "bedtime" && m.p > 0.3 * v.mass), pw = donors.reduce((a, m) => a + m.p, 0); if (!pw) return;
+    const dp = Math.min(need, donors.reduce((a, m) => a + m.p - 0.3 * v.mass, 0));
+    donors.forEach(m => { const x = dp * m.p / pw; m.p -= x; m.f += x * 4 / 9; m.kcal = kc(m); });
+    r.p += dp; const df = Math.min(r.f - 3, dp * 4 / 9); r.f -= Math.max(0, df); r.kcal = kc(r);
+  });
+  meals.sort((a, b) => a.t - b.t);
+  return meals.reduce((a, m) => a + m.kcal, 0) - k0; // faktycznie dodane (z wyrównaniem białka w regeneracji)
 }
 
 // Dwa kolejne posiłki główne poza treningiem poniżej ok. 450 kcal: jeden staje się przekąską 150–250 kcal, drugi
