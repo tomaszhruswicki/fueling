@@ -230,3 +230,8 @@ input.sw:checked::after{transform:translateX(18px)}
 .sess.done{background:var(--bg)}
 .node.n-done{width:10px;height:16px;border-radius:3px;background:var(--muted);margin-top:12px}
 .signal.live{margin:4px 0}
+.cutbox{display:grid;gap:10px;margin-bottom:12px}
+.cutbox .row .btn{min-height:32px;padding:6px 11px;font-size:.82rem}
+.cutbox .btn[aria-pressed="true"]{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.cutbox input[type=range]{width:100%;accent-color:var(--violet);margin:0}
+.cutbox .ticks{display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted)}

@@ -108,7 +108,8 @@ export const calibrationInfo = () => { calibration(S.settings.mass || 75); retur
 export function eff() {
   const a = S.cache.athlete || {}, s = S.settings, m = maintenance();
   const ffm = s.bodyFat ? m.mass * (1 - s.bodyFat / 100) : 0.85 * m.mass; // bez pomiaru: 85% masy ciała
-  return { ...s, mass: m.mass, ftp: s.ftp || a.ftp || 250, zones: a.zones || [55, 75, 90, 105, 120, 150, 999], base: m.base, floor: m.floor, wake: M.parseHM(s.wake), sleep: M.parseHM(s.sleep),
+  const cutOn = !!s.cutOn && s.cutLow > 0, recomp = cutOn && !!s.recomp;
+  return { ...s, cutOn, recomp, prot: recomp ? Math.max(s.prot || 2, M.RECOMP_PROT) : s.prot, mass: m.mass, ftp: s.ftp || a.ftp || 250, zones: a.zones || [55, 75, 90, 105, 120, 150, 999], base: m.base, floor: m.floor, wake: M.parseHM(s.wake), sleep: M.parseHM(s.sleep),
     runSpeed: runSpeed(), ffm, ffmMeasured: !!s.bodyFat, eaMin: r10(EA_MIN_KG_FFM * ffm), m };
 }
 
@@ -196,7 +197,8 @@ export function computeRange(start, n) {
     days.push({ date, ss, act: ss.filter(s => !s.off), mode: modeFor(date), planned: withDone ? sessionsFor(date, v) : null });
   }
   const show = days.slice(0, n);
-  const prof = stepProfile(v), lim = M.cutLimits(v.cutLevel, v.lowMax);
+  const prof = stepProfile(v), lim = M.cutLimits(v.cutOn ? v.cutLow : 0);
+  if (v.recomp) lim.label = "Rekompozycja";
   const desk = baseAt(prof.rest, v.m); // dzień przy biurku: średnie kroki dni wolnych
   const trainOf = list => list.filter(s => !s.off).reduce((a, s) => a + s.kcal, 0);
   show.forEach((d, i) => {
@@ -208,7 +210,9 @@ export function computeRange(start, n) {
     d.steps = stepsFor(d.date, d.intensity, prof); d.base = baseAt(d.steps.steps, v.m); d.desk = desk;
     // Deficyt dnia: dzień przed mocnym, start, ładowanie, HP, choroba i ręczne wyłączenie = 0.
     // Dzień mocny: tylko A+ (ostatni posiłek, min. 4 h po regeneracji). Zmęczenie: połowa limitów, maks. 150.
-    d.blocked = !v.cutOn || ["sick", "hp"].includes(d.mode) || d.tomorrowKey || !!S.ov.skip[d.date] || !!d.loadKg || d.prio;
+    // Rekompozycja: dni z siłownią i mocne na zero (bez A+).
+    d.recompZero = v.recomp && (d.act.some(s => s.gym) || d.intensity === "high");
+    d.blocked = !v.cutOn || ["sick", "hp"].includes(d.mode) || d.tomorrowKey || !!S.ov.skip[d.date] || !!d.loadKg || d.prio || d.recompZero;
     d.aplus = !d.blocked && d.intensity === "high";
     const cut = list => d.blocked ? null : M.dayDeficit({ desk, full: d.base + trainOf(list), type: d.aplus ? "aplus" : d.intensity, lim, tired: d.mode === "tired", floor: v.floor });
     d.cut = cut(d.ss); d.want = d.cut ? d.cut.want : 0;

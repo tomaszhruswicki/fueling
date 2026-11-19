@@ -2,8 +2,8 @@
 import * as M from "./model.js";
 import { S, DEF, MODES, hooks, getKey, setKey, changed, applyUserData, wipe } from "./store.js";
 import { api, errText, backupPayload } from "./intervals.js";
-import { maintenance, eff, autoTimes, tStr, calibrationInfo, CAL_DAYS, CAL_MIN_KCAL, CAL_MIN_W } from "./calc.js";
-import { $, esc, fmt, kfmt, num, todayISO, dnum, DOWN } from "./util.js";
+import { maintenance, eff, autoTimes, tStr, calibrationInfo, computeRange, CAL_DAYS, CAL_MIN_KCAL, CAL_MIN_W } from "./calc.js";
+import { $, esc, fmt, kfmt, num, todayISO, dnum, DOWN, addDays, parseD } from "./util.js";
 
 const render = () => hooks.render();
 const sortT = list => list.filter(Boolean).map(M.parseHM).sort((a, b) => a - b).map(tStr);
@@ -72,7 +72,6 @@ const MEAL_FIELDS = [
   ["minMeal", "Minimum posiłku, kcal", "10", () => `propozycja ${M.suggestMinMeal(eff().base, S.settings.meals)}`],
   ["wake", "Pobudka", "time"], ["sleep", "Sen", "time"], ["wkTime", "Trening w tygodniu", "time"], ["weTime", "Trening w weekend", "time"],
 ];
-const CUT_CUSTOM = [["lowMax", "Maks. deficyt dnia z luźnym treningiem, kcal", "50"]];
 const CUT_FLOOR = [["floor", "Minimum dnia bez treningu, kcal", "10", () => `auto ${maintenance().floor}`]];
 function fieldHtml([k, label, step, hint]) {
   const val = S.settings[k] ?? "", isT = step === "time";
@@ -86,19 +85,15 @@ export function renderSettings() {
   if (fieldsDirty || !document.querySelector("#v-set :focus")) {
     $("setFields").innerHTML = FIELDS.map(fieldHtml).join("");
     $("mealFields").innerHTML = MEAL_FIELDS.map(fieldHtml).join("");
-    const v = eff(), lvl = S.settings.cutLevel;
-    const opt = (k, x) => `<option value="${k}" ${lvl === k ? "selected" : ""}>${x.label}: luźny do ${x.low}, wolny do ${x.rest}, średni do ${x.mid}</option>`;
-    const L = M.cutLimits(lvl, S.settings.lowMax);
-    $("cutFields").innerHTML = `<label>Poziom<select id="cutLevel">${Object.entries(M.CUT_LEVELS).map(([k, x]) => opt(k, x)).join("")}<option value="custom" ${lvl === "custom" ? "selected" : ""}>Własny</option></select></label>` + (lvl === "custom" ? CUT_CUSTOM.map(fieldHtml).join("") + `<p class="small muted">Wychodzi: luźny do ${L.low}, wolny do ${L.rest}, średni do ${L.mid} kcal.</p>` : "") + CUT_FLOOR.map(fieldHtml).join("");
+    $("cutFields").innerHTML = CUT_FLOOR.map(fieldHtml).join("");
     document.querySelectorAll("[data-set]").forEach(el => el.onchange = () => {
       const k = el.dataset.set; let val = el.type === "time" ? el.value : num(el.value);
       if (el.type === "time" && val) val = val.replace(/^0(\d)/, "$1");
       S.settings[k] = val === "" || val == null ? (DEF[k] ?? null) : val; changed(); render();
     });
-    $("cutLevel").onchange = e => { S.settings.cutLevel = e.target.value; fieldsDirty = true; changed(); render(); };
     fieldsDirty = false;
   }
-  $("cutOn").checked = !!S.settings.cutOn;
+  renderCut();
   const v = eff();
   $("setNote").textContent = `Puste pola biorą wartości z Intervals albo domyślne. Teraz liczę z: masa ${fmt(v.mass)} kg, FTP ${v.ftp} W.`;
   renderMaint();
@@ -109,10 +104,39 @@ export function renderSettings() {
   $("keyStatus").textContent = getKey() ? "Klucz zapisany na tym urządzeniu." : "Brak klucza.";
 }
 
+// ---------- Redukcja: suwak z punktami (spec 2026-11-20) ----------
+const cutInfo = x => {
+  const L = M.cutLimits(x);
+  return x ? `Wolny do ${L.rest}, luźny do ${L.low}, średni do ${S.settings.recomp ? L.mid + " (siłownia 0)" : L.mid}, mocny 0 kcal.` : "Bilans na zero każdego dnia.";
+};
+function weekTempo() {
+  const t = todayISO(), mon = addDays(t, -((parseD(t).getDay() + 6) % 7));
+  const show = computeRange(mon, 7).show, net = show.reduce((a, d) => a + d.plan.def - d.plan.surplus, 0);
+  return net > 0 ? `Ten tydzień: −${kfmt(net)} kcal, ok. ${fmt(net / M.K.KCAL_PER_KG, 2)} kg/tydz.` : "";
+}
+function renderCut() {
+  const st = S.settings, x = st.cutOn ? st.cutLow : 0, rc = st.cutOn && !!st.recomp;
+  const pressed = p => p.recomp ? rc && x === p.low : !rc && x === p.low;
+  $("cutBox").innerHTML = `<div class="cutbox">
+    <div class="row" role="group" aria-label="Poziom redukcji">${M.CUT_PRESETS.map(p => `<button type="button" class="btn" data-preset="${p.key}" aria-pressed="${pressed(p)}">${p.label}</button>`).join("")}</div>
+    <label class="small" for="cutLow">Maks. deficyt dnia z luźnym treningiem: <b id="cutVal">${x ? x + " kcal" : "0 (utrzymanie)"}</b></label>
+    <input type="range" id="cutLow" min="0" max="${M.CUT_MAX}" step="${M.CUT_STEP}" value="${x}">
+    <div class="ticks"><span>0</span><span>200</span><span>400</span><span>600</span></div>
+    <p class="small muted" id="cutInfo">${cutInfo(x)}</p>
+    ${x ? `<label class="check"><input type="checkbox" id="recomp" ${rc ? "checked" : ""}> Rekompozycja: siłownia i mocne dni na zero, białko min. ${fmt(M.RECOMP_PROT, 1)} g/kg</label>` : ""}
+    ${x ? `<p class="small muted">${weekTempo()}</p>` : ""}
+  </div>`;
+  const set = (low, recomp) => { st.cutLow = low; st.cutOn = low > 0; if (recomp != null) st.recomp = recomp; changed(); render(); };
+  document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { const p = M.CUT_PRESETS.find(q => q.key === b.dataset.preset); set(p.low, !!p.recomp); });
+  const r = $("cutLow");
+  r.oninput = () => { const v = +r.value; $("cutVal").textContent = v ? v + " kcal" : "0 (utrzymanie)"; $("cutInfo").textContent = cutInfo(v); };
+  r.onchange = () => set(+r.value, null);
+  const rcb = $("recomp"); if (rcb) rcb.onchange = () => set(st.cutLow, rcb.checked);
+}
+
 export function initSettings(refresh, setSync) {
   document.querySelectorAll("[data-bmode]").forEach(b => b.onclick = () => { S.settings.baseMode = b.dataset.bmode; if (b.dataset.bmode === "manual" && !S.settings.base) S.settings.base = maintenance().base; changed(); render(); });
   $("baseVal").onchange = e => { const x = num(e.target.value); S.settings.base = x || null; changed(); render(); };
-  $("cutOn").onchange = e => { S.settings.cutOn = e.target.checked; changed(); render(); };
   $("keyForm").addEventListener("submit", async e => {
     e.preventDefault(); const k = $("apiKey").value.trim(); if (!k) return;
     setKey(k); $("apiKey").value = ""; $("keyStatus").textContent = "Sprawdzam…";

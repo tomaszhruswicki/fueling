@@ -236,7 +236,7 @@ test("przeliczenie: kafelki = cel dnia, brakujące makro bez kolejnych posiłkó
 });
 
 // ---------- Deficyt v2 (spec 2026-11-20): przypadki z punktu 6, dane syntetyczne ----------
-const DESK = 2430, MASS = 74, LIM = M.cutLimits("mid");
+const DESK = 2430, MASS = 74, LIM = M.cutLimits(500);
 const V2 = { ...V, base: DESK, mass: MASS, floor: 1950 };
 const dayV2 = (sessions, base, extra = {}) => {
   const act = sessions.filter(s => !s.off), type = extra.type || M.dayIntensity(act);
@@ -303,9 +303,16 @@ test("v2 brak kroków w wellness: 7000 jako średnia, mocny 75%, średni 90%", (
   assert.equal(M.stepsByType([{ steps: 9000, type: "rest" }, { steps: 0, type: "rest" }]).all, 7000, "mniej niż 3 dni: domyślne");
 });
 
-test("v2 limity: poziomy, własny proporcjonalnie, Zmęczenie, minimum dnia wolnego", () => {
-  assert.deepEqual([M.cutLimits("light").low, M.cutLimits("strong").rest, M.cutLimits("mid").mid], [400, 350, 250]);
-  const own = M.cutLimits("custom", 400); assert.deepEqual([own.low, own.rest, own.mid], [400, 240, 200]);
+test("v2 limity: punkty suwaka według tabeli, między nimi liniowo, Zmęczenie, minimum dnia wolnego", () => {
+  const pick = L => [L.rest, L.low, L.mid];
+  assert.deepEqual(pick(M.cutLimits(400)), [250, 400, 200]);
+  assert.deepEqual(pick(M.cutLimits(500)), [300, 500, 250]);
+  assert.deepEqual(pick(M.cutLimits(600)), [350, 600, 300]);
+  assert.deepEqual(pick(M.cutLimits(450)), [280, 450, 230]);
+  assert.deepEqual(pick(M.cutLimits(250)), [160, 250, 130], "rekompozycja: poniżej lekkiego proporcjonalnie");
+  assert.deepEqual(pick(M.cutLimits(0)), [0, 0, 0]);
+  assert.equal(M.cutLimits(500).label, "Umiarkowany"); assert.equal(M.cutLimits(450).label, "Własny (450)");
+  assert.equal(M.dayDeficit({ desk: DESK, full: DESK + 600, type: "low", lim: M.cutLimits(0) }).want, 0, "utrzymanie");
   assert.equal(M.dayDeficit({ desk: DESK, full: DESK + 600, type: "low", lim: LIM, tired: true }).want, 150);
   assert.equal(M.dayDeficit({ desk: DESK, full: DESK, type: "mid", lim: LIM }).want, 0, "średni: bez deficytu bazowego");
   const f = M.dayDeficit({ desk: 2000, full: 2100, type: "rest", lim: LIM, floor: 2000 });
@@ -324,4 +331,10 @@ test("v2 dwa kolejne małe posiłki: przekąska 150–250 i większy posiłek bl
   const dinner = [mk(900, "Posiłek"), mk(1140, "Kolacja")];
   M.mergeSmall(dinner, [], kc);
   assert.equal(dinner[0].kind, "snack", "bez treningu większa zostaje kolacja");
+});
+
+test("suwak: deficyt rośnie z wartością, dzień wolny w rekompozycji maks. 160", () => {
+  let prev = -1;
+  for (let x = 0; x <= 600; x += 50) { const w = M.dayDeficit({ desk: DESK, full: DESK + 500, type: "low", lim: M.cutLimits(x) }).want; assert.ok(w >= prev); prev = w; }
+  assert.equal(M.dayDeficit({ desk: DESK, full: DESK + 300, type: "rest", lim: M.cutLimits(250) }).want, 160);
 });

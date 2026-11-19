@@ -2,6 +2,13 @@
 
 Najnowsze na górze. Każda z datą i powodem, żeby nie otwierać ich ponownie bez nowego argumentu.
 
+## 20.11.2026: suwak redukcji i rekompozycja
+
+- **Suwak zamiast trzech poziomów.** Jedna wartość: maks. deficyt dnia z luźnym treningiem, 0–600 kcal co 50. Punkty Lekki (400), Umiarkowany (500), Mocny (600) dają limity z tabeli v2, między nimi liniowo, poniżej 400 proporcjonalnie do lekkiego. 0 = utrzymanie (deficyt wyłączony). Powód: Tomasz chciał poziomów pośrednich; suwak daje je bez nowych tabel. Starsze ustawienia przechodzą automatycznie (lekki 400, umiarkowany 500, mocny 600, własny według wpisanej wartości).
+- **Rekompozycja jako punkt suwaka (250) z przełącznikiem.** Dni z siłownią i mocne na zero (bez A+), białko min. 2,2 g/kg (Helms i in. 2014, Barakat i in. 2020). Nadwyżka po siłowni odłożona: najpierw obserwacja.
+- **Utrzymanie jako osobny tryb odrzucone:** to samo co deficyt wyłączony, więc jest punktem 0 na suwaku.
+- **Tempo tygodnia** pod suwakiem i w widoku Tydzień tylko jako informacja (7700 kcal/kg).
+
 ## 20.11.2026: deficyt v2
 
 Spec `docs/superpowers/specs/2026-11-20-deficyt-v2-design.md`, odpowiedź na uwagi Tomasza z żywych danych 19–22.11 (dzień wolny z wędrówką −600, siłownia 860/880 kcal przy treningu i dwa LOW po 350, mocna niedziela 3890 kcal).

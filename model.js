@@ -32,11 +32,24 @@ export const CUT_LEVELS = {
   mid: { label: "Umiarkowany", rest: 300, low: 500, mid: 250 },
   strong: { label: "Mocny", rest: 350, low: 600, mid: 300 },
 };
-// Własny poziom: maks. deficyt dnia luźnego, pozostałe proporcjonalnie do poziomu umiarkowanego.
-export function cutLimits(level, lowMax) {
-  if (CUT_LEVELS[level]) return { ...CUT_LEVELS[level], high: 0 };
-  const x = Math.max(0, +lowMax || CUT_LEVELS.mid.low), U = CUT_LEVELS.mid, r = n => Math.round(n / 10) * 10;
-  return { label: "Własny", rest: r(x * U.rest / U.low), low: r(x), mid: r(x * U.mid / U.low), high: 0 };
+// Suwak: maks. deficyt dnia luźnego 0–600 kcal. Na punktach 400/500/600 limity z tabeli Tomasza, między nimi
+// liniowo, poniżej 400 proporcjonalnie do poziomu lekkiego. 0 = utrzymanie.
+export const CUT_MAX = 600, CUT_STEP = 50;
+export const CUT_PRESETS = [
+  { key: "maint", label: "Utrzymanie", low: 0 },
+  { key: "recomp", label: "Rekompozycja", low: 250, recomp: true },
+  { key: "light", label: "Lekki", low: 400 },
+  { key: "mid", label: "Umiarkowany", low: 500 },
+  { key: "strong", label: "Mocny", low: 600 },
+];
+export const RECOMP_PROT = 2.2; // g/kg, minimum białka w rekompozycji (Helms i in. 2014)
+export function cutLimits(lowMax) {
+  const x = Math.max(0, Math.min(CUT_MAX, +lowMax || 0)), r = n => Math.round(n / 10) * 10;
+  const A = [{ low: 0, rest: 0, mid: 0 }, CUT_LEVELS.light, CUT_LEVELS.mid, CUT_LEVELS.strong];
+  let i = 1; while (i < A.length - 1 && x > A[i].low) i++;
+  const lo = A[i - 1], hi = A[i], t = (x - lo.low) / (hi.low - lo.low);
+  const p = CUT_PRESETS.find(q => q.low === x && !q.recomp);
+  return { label: p ? p.label : `Własny (${x})`, low: x, rest: r(lo.rest + (hi.rest - lo.rest) * t), mid: r(lo.mid + (hi.mid - lo.mid) * t), high: 0 };
 }
 // type: rest | low | mid | high | aplus. desk: utrzymanie dnia przy biurku (średnie kroki dni wolnych),
 // full: utrzymanie z krokami dnia + trening. floor: minimum dnia wolnego (RMR × 1,15).

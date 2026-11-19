@@ -171,6 +171,7 @@ function deficitWhy(d, p, v) {
   if (!v.cutOn) return "Bilans na zero.";
   if (S.ov.skip[d.date]) return "Deficyt wyłączony ręcznie na ten dzień.";
   if (d.tomorrowKey) return "Jutro mocny trening: dziś bez deficytu, żeby wejść w niego z pełnym zapasem.";
+  if (d.recompZero) return `Rekompozycja: ${d.act.some(s => s.gym) ? "dzień z siłownią" : "dzień mocny"} na zero, białko ${fmt(v.prot, 1)} g/kg.`;
   const c = d.cut;
   const lim = p.cutLimit === "ea" ? ` Ograniczony przez próg dostępności energii: min. ${kfmt(v.eaMin)} kcal po odjęciu treningu${v.ffmMeasured ? "" : " (masa beztłuszczowa przyjęta jako 85% masy, wpisz % tkanki tłuszczowej w Ustawieniach)"}.` : p.cutLimit === "meals" && p.def < d.want - 20 ? ` Więcej się nie zmieści: posiłki są na minimum albo cięte o 30%.` : c && c.floorHit ? ` Ograniczony przez minimum dnia bez treningu (${kfmt(v.floor)} kcal).` : "";
   if (d.aplus) return (p.def > 0 ? `Dzień mocny: deficyt −${r10(p.def)} kcal tylko w ostatnim posiłku, min. 4 h po regeneracji.` : "Dzień mocny: bez deficytu (ostatni posiłek za blisko regeneracji).") + lim;

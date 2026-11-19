@@ -8,7 +8,7 @@ A1, A2, A3, A4, A5, A7, B1, B2, B3, B4 (bieg, spacery), C1. Szczegóły w `docs/
 
 ## Zrobione 20.11.2026
 
-Deficyt v2: jedzenie od dnia przy biurku, kroki według typu dnia, spacer od 90 min chroni posiłki, rozdział posiłków z kodów i równej reszty, łączenie małych posiłków. Szczegóły w `docs/decyzje.md`.
+Suwak redukcji 0–600 z punktami Utrzymanie, Rekompozycja, Lekki, Umiarkowany, Mocny. Deficyt v2: jedzenie od dnia przy biurku, kroki według typu dnia, spacer od 90 min chroni posiłki, rozdział posiłków z kodów i równej reszty, łączenie małych posiłków. Szczegóły w `docs/decyzje.md`.
 
 ## Proponowana kolejność
 
@@ -16,6 +16,7 @@ Deficyt v2: jedzenie od dnia przy biurku, kroki według typu dnia, spacer od 90 
 2. Obserwacja deficytu v2 przez 2 tygodnie: ile wchodzi realnie (dzień luźny z dwoma posiłkami do cięcia mieści ok. 440 z 500 kcal przez limit 30% posiłku).
 3. C3: test potu (1 h).
 4. C2: plan a wykonanie w widoku Tydzień (1 h).
+5. Suwak automatycznie według trendu masy (docelowe tempo w kg/tydz., korekta co tydzień, min. 8 pomiarów wagi). Po obserwacji v2. 2 h.
 
 Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 
@@ -32,7 +33,7 @@ Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 
 ## B. Porządek kodu
 
-1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 43 testy, `node --test`).
+1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 44 testy, `node --test`).
 2. ~~Podział `app.js`~~ Zrobione: `util`, `store`, `intervals`, `calc`, `log`, `settings`, `app`.
 3. ~~Stałe modelu w jednym miejscu~~ Zrobione: `K` w `model.js`. Krzywe udziału węglowodanów zostają przy funkcjach.
 4. **Wydatek siłowni i biegu stały** (280 kcal/h, 10 kcal/min) niezależnie od masy. Przeliczać przez masę ciała albo brać kJ/kcal z wykonanej aktywności. 30 min.
