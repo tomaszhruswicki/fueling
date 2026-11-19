@@ -17,7 +17,52 @@ export const K = {
   KCAL_PER_KG: 7700,   // energia 1 kg masy ciała przy kalibracji
   SNACK_MIN: 150,      // minimum przekąski (kcal)
   MIN_ACT_SEC: 600,    // aktywność krótsza niż 10 min nie zmienia planu
+  SMALL_MAIN: 450,     // dwa kolejne posiłki główne poniżej tego: jeden staje się przekąską
+  SNACK_MAX: 250,      // przekąska z połączenia dwóch małych posiłków: 150–250 kcal
+  WALK_GUARD_MIN: 90,  // spacer lub wędrówka od 90 min chroni posiłek przed i po
+  STEP_MIN_DAYS: 3,    // min. dni danego typu z krokami, inaczej udział średniej ogólnej
 };
+
+// ---------- Deficyt (spec 2026-11-20) ----------
+// Jedzenie dnia = większa z wartości: dzień przy biurku − deficyt bazowy albo pełny wydatek − maks. deficyt typu dnia.
+// Każdy dzień od zera, bez przenoszenia. Dzień mocny: tylko A+ (ostatni posiłek) z limitem dnia wolnego.
+export const CUT_BASE = { rest: 150, low: 150, mid: 0, high: 0 };
+export const CUT_LEVELS = {
+  light: { label: "Lekki", rest: 250, low: 400, mid: 200 },
+  mid: { label: "Umiarkowany", rest: 300, low: 500, mid: 250 },
+  strong: { label: "Mocny", rest: 350, low: 600, mid: 300 },
+};
+// Własny poziom: maks. deficyt dnia luźnego, pozostałe proporcjonalnie do poziomu umiarkowanego.
+export function cutLimits(level, lowMax) {
+  if (CUT_LEVELS[level]) return { ...CUT_LEVELS[level], high: 0 };
+  const x = Math.max(0, +lowMax || CUT_LEVELS.mid.low), U = CUT_LEVELS.mid, r = n => Math.round(n / 10) * 10;
+  return { label: "Własny", rest: r(x * U.rest / U.low), low: r(x), mid: r(x * U.mid / U.low), high: 0 };
+}
+// type: rest | low | mid | high | aplus. desk: utrzymanie dnia przy biurku (średnie kroki dni wolnych),
+// full: utrzymanie z krokami dnia + trening. floor: minimum dnia wolnego (RMR × 1,15).
+export function dayDeficit({ desk, full, type, lim, tired = false, floor = 0 }) {
+  const t = type === "aplus" ? "rest" : type;
+  let bd = CUT_BASE[t] || 0, md = lim[t] || 0;
+  if (tired) { bd /= 2; md = Math.min(150, md / 2); }
+  let want = Math.max(0, Math.min(full - desk + bd, md));
+  let floorHit = false;
+  if (t === "rest" && type !== "aplus" && floor && full - want < floor) { want = Math.max(0, full - floor); floorHit = true; }
+  return { want, food: full - want, bd, md, desk, full, floorHit };
+}
+
+// ---------- Kroki według typu dnia ----------
+// rows: [{steps, type}] z 28 dni. Średnia typu z min. 3 dni, inaczej mocny 75%, średni 90%, luźny i wolny 100% średniej ogólnej.
+export const STEP_FALLBACK = { high: 0.75, mid: 0.9, low: 1, rest: 1 };
+export function stepsByType(rows, def = 7000) {
+  const ok = (rows || []).filter(r => r.steps > 0), avg = a => a.reduce((s, r) => s + r.steps, 0) / a.length;
+  const all = ok.length >= K.STEP_MIN_DAYS ? avg(ok) : def;
+  const out = { all, measured: ok.length >= K.STEP_MIN_DAYS, n: {}, fb: {} };
+  for (const t of ["rest", "low", "mid", "high"]) {
+    const a = ok.filter(r => r.type === t); out.n[t] = a.length;
+    if (a.length >= K.STEP_MIN_DAYS) { out[t] = avg(a); out.fb[t] = false; } else { out[t] = all * STEP_FALLBACK[t]; out.fb[t] = true; }
+  }
+  return out;
+}
 
 export const RIDES = new Set(["Ride", "VirtualRide", "MountainBikeRide", "GravelRide", "EBikeRide", "TrackRide", "Cyclocross", "Velomobile"]);
 const RUNS = new Set(["Run", "VirtualRun", "TrailRun"]);
@@ -376,34 +421,46 @@ export function planDay(day, ctx) {
 
   function allocate(meals) {
     codeAndName(meals, act, !!ctx.tomorrowKey, !!ctx.tomorrowLong);
-    // Białko
-    const pw = meals.map(m => m.role === "presnack" ? 0.25 : m.kind === "snack" ? 0.6 : m.role === "recovery" ? 1.2 : 1);
-    const pws = pw.reduce((a, x) => a + x, 0) || 1;
-    meals.forEach((m, i) => m.p = P * pw[i] / pws);
-    // Tłuszcz: więcej w posiłkach LOW, mało wokół treningu
-    const fw = meals.map(m => ({ L: 1.6, M: 1, H: 0.5 }[m.code]) * (m.role === "presnack" ? 0.15 : m.kind === "snack" ? 0.45 : 1));
-    const fws = fw.reduce((a, x) => a + x, 0) || 1;
-    meals.forEach((m, i) => m.f = F * fw[i] / fws);
+    // Rozdział (spec 2026-11-20): suma dnia jak wcześniej (białko i tłuszcz z ustawień, węgle reszta w granicach
+    // zakresu dnia). Posiłek dostaje węgle według kodu (LOW 0,4, MEDIUM 0,9, HIGH 1,35 g/kg), a pozostała energia
+    // rozkłada się równo na posiłki. Tłuszcz domyka energię posiłku: więcej w LOW, mało przy treningu.
+    const wE = m => m.role === "presnack" ? 0.25 : m.kind === "snack" ? 0.5 : 1;
+    const wsum = meals.reduce((a, m) => a + wE(m), 0) || 1;
+    meals.forEach(m => m.p = P * wE(m) / wsum);
     // Ładowanie, start, tryb HP: minimalne węgle dnia i podniesienie kodów.
     const minKg = Math.max(ctx.loadKg || 0, act.some(s => s.prio) ? carbBand({ sessions: act, key: true }).lo : 0);
     if (ctx.loadKg || act.some(s => s.prio)) meals.forEach(m => { if (m.code === "L") m.code = "M"; });
-    // Węglowodany
+    // Węglowodany dnia
+    const band = carbBand({ sessions: act, key: act.some(s => s.key) });
     const cBase = (maint - 4 * P - 9 * F) / 4;
     const hpAdd = ctx.hp ? (v.hpCarb || 1) * v.mass : 0;
-    const cTotal = Math.max(cBase + hpAdd, minKg * v.mass);
+    let cTotal = Math.max(cBase + hpAdd, minKg * v.mass);
     const surplus = (cTotal - cBase) * 4;
+    const eDay = maint + surplus;
+    // Granice zakresu: powyżej górnej nadwyżka idzie w tłuszcz; poniżej dolnej węgle kosztem tłuszczu (min. 0,6 g/kg).
+    if (!minKg && cTotal > band.hi * v.mass) cTotal = band.hi * v.mass;
+    if (cTotal < band.lo * v.mass) cTotal = Math.min(band.lo * v.mass, cTotal + Math.max(0, (eDay - 4 * P - 4 * cTotal) / 9 - 0.6 * v.mass) * 9 / 4);
     const cMeals = Math.max(0, cTotal - intra);
-    const lowFix = m => (m.kind === "snack" ? 0.2 : 0.4) * v.mass;
-    const lows = meals.filter(m => m.code === "L"), others = meals.filter(m => m.code !== "L");
-    const lowSum = lows.reduce((a, m) => a + lowFix(m), 0);
-    if (!others.length) meals.forEach(m => m.c = cMeals * lowFix(m) / (lowSum || 1));
-    else {
-      const lowScale = lowSum > cMeals * 0.6 ? cMeals * 0.6 / lowSum : 1;
-      lows.forEach(m => m.c = lowFix(m) * lowScale);
-      const rest = cMeals - lowSum * lowScale;
-      const cw = m => (m.code === "H" ? 2.2 : 1) * (m.role === "presnack" ? 0.35 : m.kind === "snack" ? 0.5 : 1);
-      const cws = others.reduce((a, m) => a + cw(m), 0);
-      others.forEach(m => m.c = rest * cw(m) / cws);
+    const G = { L: 0.4, M: 0.9, H: 1.35 };
+    const c0 = m => (m.role === "presnack" ? 0.5 : G[m.code] * (m.kind === "snack" ? 0.5 : 1)) * v.mass;
+    const sum0 = meals.reduce((a, m) => a + c0(m), 0);
+    if (sum0 <= cMeals) meals.forEach(m => m.c = c0(m) + (cMeals - sum0) * wE(m) / wsum);
+    else { // za mało węgli na kody: najpierw z posiłków poza treningiem (do 0,2 g/kg), potem po równo
+      const soft = meals.filter(m => !isTraining(m)), hard = meals.filter(m => isTraining(m));
+      const hardSum = hard.reduce((a, m) => a + c0(m), 0), softMin = soft.reduce((a, m) => a + 0.2 * v.mass * wE(m), 0);
+      if (cMeals >= hardSum + softMin) {
+        const softSum = soft.reduce((a, m) => a + c0(m), 0), k = (cMeals - hardSum - softMin) / Math.max(1e-9, softSum - softMin);
+        hard.forEach(m => m.c = c0(m)); soft.forEach(m => { const lo = 0.2 * v.mass * wE(m); m.c = lo + (c0(m) - lo) * k; });
+      } else meals.forEach(m => m.c = c0(m) * cMeals / sum0);
+    }
+    // Tłuszcz: energia posiłku równa (waga posiłku), tłuszcz domyka; minimum 5 g (przekąska przed treningiem 2 g).
+    const eMeals = eDay - 4 * intra;
+    const fMin = m => m.role === "presnack" ? 2 : 5;
+    meals.forEach(m => m.f = Math.max(fMin(m), (eMeals * wE(m) / wsum - 4 * m.p - 4 * m.c) / 9));
+    const fOver = meals.reduce((a, m) => a + m.f, 0) - (eMeals - 4 * P - 4 * cMeals) / 9;
+    if (fOver > 0.01) { // minimum tłuszczu w posiłkach przy treningu: oddają te z większym tłuszczem
+      const room = meals.reduce((a, m) => a + (m.f - fMin(m)), 0) || 1;
+      meals.forEach(m => m.f -= fOver * (m.f - fMin(m)) / room);
     }
     // Start: posiłek przed min. 2 g/kg węgli (3 h przed), przekąska ok. 0,5 g/kg.
     act.filter(s => s.prio).forEach(s => {
@@ -452,9 +509,16 @@ export function planDay(day, ctx) {
     let def = 0, cutLimit = null;
     let want = ctx.deficit || 0;
     if (want > 0 && ctx.eaMin) { const room = v.base + surplus - ctx.eaMin; if (room < want) { want = Math.max(0, room); cutLimit = "ea"; } }
+    // Węgle dnia nie schodzą przez deficyt poniżej dolnej granicy zakresu (potem tnie tłuszcz).
+    let cRoom = meals.reduce((a, m) => a + m.c, 0) + intra - band.lo * v.mass;
     if (want > 0) {
       const guard = new Set();
       act.filter(s => s.high || s.long).forEach(s => meals.filter(m => m.t < s.start && m.role !== "recovery").slice(-2).forEach(m => guard.add(m)));
+      // Spacer lub wędrówka od 90 min: posiłek przed i po bez cięcia.
+      (ctx.walks || []).filter(w => w.durMin >= K.WALK_GUARD_MIN).forEach(w => {
+        const before = meals.filter(m => m.t <= w.start).slice(-1)[0], after = meals.find(m => m.t >= w.start + w.durMin);
+        if (before) guard.add(before); if (after) guard.add(after);
+      });
       let cands = meals.filter(m => !isTraining(m) && m.code !== "H" && !guard.has(m));
       if (ctx.aplus) {
         const last = meals[meals.length - 1], rec = meals.filter(m => m.role === "recovery").map(m => m.t);
@@ -463,11 +527,14 @@ export function planDay(day, ctx) {
       const floorK = m => m.kind !== "main" ? minSnack : m.code === "L" ? Math.max(300, 0.7 * minMain) : minMain;
       cands.forEach(m => { m.k0 = m.kcal; });
       const room = m => Math.max(0, Math.min(m.k0 * 0.3 - (m.k0 - m.kcal), m.kcal - floorK(m)));
-      const take = (m, amt) => { // węgle do 0,3 g/kg (z dala od treningu potrzeba ich mniej), tłuszcz do 10 g, potem po równo
+      // Udział węgli w cięciu: tyle, ile pozwala dolna granica zakresu dnia, reszta z tłuszczu (do 10 g), potem po równo.
+      const cFrac = Math.max(0, Math.min(1, cRoom * 4 / want));
+      const take = (m, amt) => {
         let left = amt;
-        const dc = Math.min(left / 4, Math.max(0, m.c - 0.3 * v.mass)); m.c -= dc; left -= dc * 4;
+        const dc = Math.min(left * cFrac / 4, Math.max(0, m.c - 0.3 * v.mass), Math.max(0, cRoom)); m.c -= dc; left -= dc * 4; cRoom -= dc;
         const df = Math.min(left / 9, Math.max(0, m.f - 10)); m.f -= df; left -= df * 9;
-        if (left > 0.5) { const c2 = Math.min(left / 8, Math.max(0, m.c - 15)), f2 = Math.min((left - c2 * 4) / 9, Math.max(0, m.f - 6)); m.c -= c2; m.f -= f2; left -= c2 * 4 + f2 * 9; }
+        if (left > 0.5) { const c2 = Math.min(left / 4, Math.max(0, m.c - 0.3 * v.mass), Math.max(0, cRoom)); m.c -= c2; left -= c2 * 4; cRoom -= c2; }
+        if (left > 0.5) { const c2 = Math.min(left / 8, Math.max(0, m.c - 15)), f2 = Math.min((left - c2 * 4) / 9, Math.max(0, m.f - 6)); m.c -= c2; m.f -= f2; left -= c2 * 4 + f2 * 9; cRoom -= c2; }
         m.kcal = kc(m); return amt - left;
       };
       let left = want;
@@ -482,13 +549,33 @@ export function planDay(day, ctx) {
       cands.forEach(m => { delete m.k0; });
       if (left > 5 && !cutLimit) cutLimit = "meals";
     }
+    mergeSmall(meals, act, kc);
     const cT = meals.reduce((a, m) => a + m.c, 0) + intra, pT = meals.reduce((a, m) => a + m.p, 0), fT = meals.reduce((a, m) => a + m.f, 0);
-    const band = carbBand({ sessions: act, key: act.some(s => s.key) });
     return {
       meals, maint, train, intra, def, surplus, target: maint - def + surplus, cT, pT, fT, band, minMain, cutLimit, wantDef: ctx.deficit || 0,
       cKg: cT / v.mass, low: cT / v.mass < band.lo - 0.05, loadKg: ctx.loadKg || 0, hp: !!ctx.hp,
       fluids: { meals: mealMl, intra: intraMl, between: betweenMl, total: mealMl + intraMl + betweenMl },
     };
+  }
+}
+
+// Dwa kolejne posiłki główne poza treningiem poniżej ok. 450 kcal: jeden staje się przekąską 150–250 kcal, drugi
+// przejmuje resztę. Większy zostaje ten bliżej kolejnego treningu; bez treningu później (kolacja).
+export function mergeSmall(meals, act, kc) {
+  const isTr = m => ["pre", "presnack", "recovery"].includes(m.role);
+  for (let i = 0; i + 1 < meals.length; i++) {
+    const a = meals[i], b = meals[i + 1];
+    if (a.kind !== "main" || b.kind !== "main" || isTr(a) || isTr(b) || a.kcal >= K.SMALL_MAIN || b.kcal >= K.SMALL_MAIN) continue;
+    const next = act.filter(s => s.start > b.t).sort((x, y) => x.start - y.start)[0];
+    const big = next ? (next.start - b.t <= next.start - a.t ? b : a) : b, small = big === a ? b : a;
+    const tot = a.kcal + b.kcal, sk = Math.min(K.SNACK_MAX, Math.max(K.SNACK_MIN, Math.round(tot * 0.25 / 10) * 10));
+    const r = sk / small.kcal;
+    for (const k of ["p", "c", "f"]) { const mv = small[k] * (1 - r); small[k] -= mv; big[k] += mv; }
+    const ml = small.ml - 250; small.ml = 250; big.ml += Math.max(0, ml);
+    small.kind = "snack"; small.merged = true; big.merged = true;
+    small.name = small.t < 10.5 * 60 && /^Śniadanie/.test(small.name) ? "Małe śniadanie" : small.t < 12 * 60 ? "II śniadanie" : "Podwieczorek";
+    small.kcal = kc(small); big.kcal = kc(big);
+    i++;
   }
 }
 

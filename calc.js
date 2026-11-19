@@ -29,27 +29,34 @@ export function maintenance() {
   return { base, src, rmr, rmrEq: ffm ? "Cunningham" : "ten Haaf", ffm, steps, stepKcal, formula, cal, floor, mass, height, age };
 }
 
-// ---------- Kroki ----------
-// Utrzymanie zawiera kroki. Dni przyszłe: średnia z 7 pełnych dni (min. 4 dni z krokami; inaczej 28 dni, potem 7000).
-// Dziś: większa z wartości średnia i kroki do teraz. Dni minione: kroki tego dnia. Spacery i wędrówki są w krokach,
-// więc nie liczą się jako trening.
-export const STEP_KCAL_KG = 0.0005;
-export function stepsAvg() {
-  const t = todayISO(), wl = (S.cache.wellness || []).filter(x => x.steps && x.id < t);
-  const avg = a => a.reduce((s, x) => s + x.steps, 0) / a.length;
-  const w7 = wl.filter(x => x.id >= addDays(t, -7)); if (w7.length >= 4) return avg(w7);
-  const w28 = wl.filter(x => x.id >= addDays(t, -28)); return w28.length >= 7 ? avg(w28) : null;
+// ---------- Kroki (spec 2026-11-20) ----------
+// Utrzymanie zawiera kroki: baza odpowiada średniej z 28 dni. Dni przyszłe: średnia dni tego samego typu (mocny,
+// średni, luźny, wolny) z 28 dni; mniej niż 3 dni typu: mocny 75%, średni 90%, luźny i wolny 100% średniej ogólnej.
+// Dziś: większa z wartości średnia typu i kroki do teraz. Dni minione: kroki tego dnia. Spacery i wędrówki są
+// w krokach, więc nie liczą się jako trening. Dzień przy biurku: średnia dni wolnych.
+export const STEP_KCAL_KG = 0.0005, STEP_DAYS = 28;
+const stepRows = () => { const t = todayISO(), from = addDays(t, -STEP_DAYS); return (S.cache.wellness || []).filter(x => x.steps && x.id >= from && x.id < t); };
+export function stepsAvg() { const p = M.stepsByType(stepRows()); return p.measured ? p.all : null; }
+let profCache = null;
+export function stepProfile(v) {
+  const key = (S.cache.fetchedAt || 0) + "|" + S.savedAt + "|" + todayISO();
+  if (profCache && profCache.key === key) return profCache.val;
+  const rows = stepRows().map(x => ({ steps: x.steps, type: M.dayIntensity(sessionsFor(x.id, v, true).filter(s => !s.off)) }));
+  const val = M.stepsByType(rows); profCache = { key, val }; return val;
 }
-export function stepsFor(date) {
-  const avg = stepsAvg() ?? 7000, t = todayISO(), w = (S.cache.wellness || []).find(x => x.id === date) || {};
-  if (date > t) return { steps: avg, src: "średnia z 7 dni" };
-  if (date === t) return w.steps > avg ? { steps: w.steps, src: "kroki z dziś" } : { steps: avg, src: "średnia z 7 dni" };
-  return w.steps ? { steps: w.steps, src: "kroki z tego dnia" } : { steps: avg, src: "średnia z 7 dni" };
+const TYPE_GEN = { rest: "wolnych", low: "luźnych", mid: "średnich", high: "mocnych" };
+const typeSrc = (prof, type) => prof.fb[type] ? (prof.measured ? `${Math.round(M.STEP_FALLBACK[type] * 100)}% średniej z ${STEP_DAYS} dni` : "brak kroków, przyjęto 7000") : `średnia dni ${TYPE_GEN[type]} z ${STEP_DAYS} dni`;
+export function stepsFor(date, type, prof) {
+  const t = todayISO(), w = (S.cache.wellness || []).find(x => x.id === date) || {}, avg = prof[type];
+  if (date > t) return { steps: avg, src: typeSrc(prof, type) };
+  if (date === t) return w.steps > avg ? { steps: w.steps, src: "kroki z dziś" } : { steps: avg, src: typeSrc(prof, type) };
+  return w.steps ? { steps: w.steps, src: "kroki z tego dnia" } : { steps: avg, src: typeSrc(prof, type) };
 }
-// Utrzymanie dnia: baza z kalkulatora/kalibracji skorygowana o różnicę kroków dnia względem średniej. Tryb ręczny bez korekty.
-export function baseFor(date, m) {
+// Utrzymanie przy danej liczbie kroków: baza z kalkulatora/kalibracji skorygowana o różnicę względem średniej.
+// Tryb ręczny bez korekty.
+export function baseAt(steps, m) {
   if (S.settings.baseMode === "manual" && S.settings.base) return m.base;
-  return r10(m.base + (stepsFor(date).steps - (m.steps ?? 7000)) * STEP_KCAL_KG * m.mass);
+  return r10(m.base + (steps - (m.steps ?? 7000)) * STEP_KCAL_KG * m.mass);
 }
 const WALKS = new Set(["Walk", "Hike"]);
 export const isWalk = a => WALKS.has(a.type);
@@ -60,16 +67,8 @@ export function runSpeed() {
   return h > 0.3 ? km / h : null;
 }
 
-// ---------- Deficyt: poziomy i udziały dni (spec 2026-11-19) ----------
-export const CUT_LEVELS = { light: [0.0025, "Lekki", "cap"], mid: [0.005, "Umiarkowany", "target"], strong: [0.007, "Mocny", "target"] };
-export const SHARE = { rest: 0.6, low: 1, mid: 0.6, high: 0, aplus: 0.6 };
+// ---------- Deficyt (spec 2026-11-20): limity w model.js (cutLimits, dayDeficit) ----------
 export const EA_MIN_KG_FFM = 30;
-export function cutBudget(v) {
-  const L = CUT_LEVELS[v.cutLevel];
-  if (!L) return { weekly: v.weekly || 0, dayCap: v.cap || 0, mode: "cap", label: "Własny" };
-  const weekly = r10(L[0] * v.mass * M.K.KCAL_PER_KG);
-  return { weekly, dayCap: Math.min(600, r10(weekly / 3)), mode: L[2], label: L[1] };
-}
 
 // ---------- Kalibracja z danych (jedna dla Ustawień i Dziennika) ----------
 // 28 dni przed dziś. Wydatek całkowity = średnie kcal zjedzone − trend masy (regresja liniowa, 7700 kcal/kg).
@@ -197,44 +196,38 @@ export function computeRange(start, n) {
     days.push({ date, ss, act: ss.filter(s => !s.off), mode: modeFor(date), planned: withDone ? sessionsFor(date, v) : null });
   }
   const show = days.slice(0, n);
+  const prof = stepProfile(v), lim = M.cutLimits(v.cutLevel, v.lowMax);
+  const desk = baseAt(prof.rest, v.m); // dzień przy biurku: średnie kroki dni wolnych
+  const trainOf = list => list.filter(s => !s.off).reduce((a, s) => a + s.kcal, 0);
   show.forEach((d, i) => {
     const t1 = days[i + 1], t2 = days[i + 2];
     d.tomorrowKey = t1.act.some(s => s.key); d.tomorrowLong = t1.act.some(s => s.long);
     d.loadKg = d.mode === "sick" ? 0 : M.loadingFor([...t1.act.map(s => ({ offset: 1, s })), ...t2.act.map(s => ({ offset: 2, s }))]);
     d.prio = d.act.some(s => s.prio);
-    d.base = baseFor(d.date, v.m); d.steps = stepsFor(d.date);
     d.intensity = M.dayIntensity(d.act);
-    // Udział dnia: wieczór przed mocnym dniem, start, ładowanie, HP, choroba i ręczne wyłączenie = 0.
-    // Dzień mocny: tylko A+ (ostatni posiłek, min. 4 h po regeneracji). Zmęczenie: połowa udziału.
-    const blocked = !v.cutOn || ["sick", "hp"].includes(d.mode) || d.tomorrowKey || S.ov.skip[d.date] || d.loadKg || d.prio;
-    d.aplus = !blocked && d.intensity === "high";
-    d.share = blocked ? 0 : (d.aplus ? SHARE.aplus : SHARE[d.intensity]) * (d.mode === "tired" ? 0.5 : 1);
-  });
-  // Cel tygodnia według udziałów. Lekki i własny: sufit (bez odrabiania). Umiarkowany i mocny: niewykorzystana część
-  // przechodzi na kolejne dni wolne i luźne tego tygodnia. Limit dnia; Zmęczenie maks. 150 kcal.
-  const B = cutBudget(v), sumShare = show.reduce((a, d) => a + d.share, 0);
-  let carry = 0;
-  show.forEach(d => {
-    const part = sumShare ? B.weekly * d.share / sumShare : 0;
-    const takesCarry = B.mode === "target" && d.share > 0 && ["rest", "low"].includes(d.intensity);
-    const cap = d.mode === "tired" ? Math.min(150, B.dayCap) : B.dayCap;
-    d.want = Math.min(cap, part + (takesCarry ? carry : 0));
-    if (takesCarry) carry = Math.max(0, carry - Math.max(0, d.want - part));
-    // Minimum dnia bez treningu (RMR × 1,15) w dni wolne; w dni treningowe chroni próg dostępności energii w planDay.
-    if (!d.share) d.want = 0; else if (d.intensity === "rest") d.want = Math.min(d.want, Math.max(0, d.base - v.floor));
-    d.partWant = part;
+    d.steps = stepsFor(d.date, d.intensity, prof); d.base = baseAt(d.steps.steps, v.m); d.desk = desk;
+    // Deficyt dnia: dzień przed mocnym, start, ładowanie, HP, choroba i ręczne wyłączenie = 0.
+    // Dzień mocny: tylko A+ (ostatni posiłek, min. 4 h po regeneracji). Zmęczenie: połowa limitów, maks. 150.
+    d.blocked = !v.cutOn || ["sick", "hp"].includes(d.mode) || d.tomorrowKey || !!S.ov.skip[d.date] || !!d.loadKg || d.prio;
+    d.aplus = !d.blocked && d.intensity === "high";
+    const cut = list => d.blocked ? null : M.dayDeficit({ desk, full: d.base + trainOf(list), type: d.aplus ? "aplus" : d.intensity, lim, tired: d.mode === "tired", floor: v.floor });
+    d.cut = cut(d.ss); d.want = d.cut ? d.cut.want : 0;
     d.times = timesFor(d.date, v);
-    const ctx = { settings: { ...v, base: d.base }, times: d.times.list.map(M.parseHM), tomorrowKey: d.tomorrowKey, tomorrowLong: d.tomorrowLong, deficit: d.want, aplus: d.aplus, eaMin: v.eaMin, hp: d.mode === "hp", loadKg: d.loadKg };
+    d.walks = walksOn(d.date);
+    const walks = d.walks.map(a => ({ start: M.parseHM((a.start_date_local || "").slice(11, 16)), durMin: (+a.moving_time || +a.elapsed_time || 0) / 60 }));
+    const ctx = (want, aplus) => ({ settings: { ...v, base: d.base }, times: d.times.list.map(M.parseHM), tomorrowKey: d.tomorrowKey, tomorrowLong: d.tomorrowLong, deficit: want, aplus, eaMin: v.eaMin, hp: d.mode === "hp", loadKg: d.loadKg, walks });
     d.done = d.ss.filter(s => s.done);
-    d.plan = M.planDay({ sessions: d.ss }, ctx);
-    if (d.date <= t && (d.done.length || d.ss.some(s => s.missed))) d.orig = M.planDay({ sessions: d.planned }, ctx);
+    d.plan = M.planDay({ sessions: d.ss }, ctx(d.want, d.aplus));
+    if (d.date <= t && (d.done.length || d.ss.some(s => s.missed))) {
+      const oc = cut(d.planned), oType = M.dayIntensity(d.planned.filter(s => !s.off));
+      d.orig = M.planDay({ sessions: d.planned }, ctx(oc ? oc.want : 0, !d.blocked && oType === "high"));
+    }
     if (d.date === t && d.done.length) d.plan = M.liveAdjust(d.orig, d.plan, now, v.mass);
     d.missed = d.ss.filter(s => s.missed || (d.date === t && !s.done && !s.off && s.start + s.durSec / 60 + 60 < now));
     const [tag, tagLabel] = dayTag(d.act); d.tag = tag; d.tagLabel = tagLabel;
-    d.notes = notesFor(d.date); d.walks = walksOn(d.date);
-    if (B.mode === "target" && d.share > 0) carry += Math.max(0, d.partWant - d.plan.def); // nie weszło: przechodzi dalej
+    d.notes = notesFor(d.date);
   });
-  return { v, show, budget: B };
+  return { v, show, lim, prof, desk };
 }
 export const winStart = () => addDays(addDays(todayISO(), -((parseD(todayISO()).getDay() + 6) % 7)), 7 * S.week);
 

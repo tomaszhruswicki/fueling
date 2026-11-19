@@ -2,6 +2,18 @@
 
 Najnowsze na górze. Każda z datą i powodem, żeby nie otwierać ich ponownie bez nowego argumentu.
 
+## 20.11.2026: deficyt v2
+
+Spec `docs/superpowers/specs/2026-11-20-deficyt-v2-design.md`, odpowiedź na uwagi Tomasza z żywych danych 19–22.11 (dzień wolny z wędrówką −600, siłownia 860/880 kcal przy treningu i dwa LOW po 350, mocna niedziela 3890 kcal).
+
+- **Jedzenie od dnia przy biurku.** Jedzenie dnia = większa z wartości: dzień przy biurku (utrzymanie przy średnich krokach dni wolnych) − deficyt bazowy albo pełny wydatek − maks. deficyt typu dnia. Deficyt bazowy: wolny i luźny 150, średni i mocny 0. Maks. (lekki/umiarkowany/mocny): wolny 250/300/350, luźny 400/500/600, średni 200/250/300, mocny 0. Powód: niewielka aktywność w ciągu dnia ma tworzyć deficyt, a nie podnosić jedzenie; każdy dzień od zera, bo logowanie nie będzie idealne.
+- **Bez przenoszenia między dniami i bez celu tygodnia** (`SHARE`, `cutBudget` z v10 usunięte). Tydzień pokazuje wynikowy deficyt i tempo (7700 kcal/kg) tylko jako informację. Własny poziom: maks. deficyt dnia luźnego, pozostałe proporcjonalnie do umiarkowanego.
+- **A+ w dzień mocny z limitem dnia wolnego.** Spec mówi „mocny 0, A+ zostaje” bez kwoty; przyjęto limit dnia wolnego (w v10 A+ miał udział dnia wolnego, 60%). Do potwierdzenia przez Tomasza.
+- **Kroki według typu dnia z 28 dni**, mniej niż 3 dni typu: mocny 75%, średni 90%, luźny i wolny 100% średniej. Utrzymanie odnosi się do średniej z 28 dni (wcześniej 7). Powód: w mocne dni Tomasz rusza się mniej, a utrzymanie zakładało średnie kroki (dublowanie 100–250 kcal).
+- **Spacer lub wędrówka od 90 min chroni posiłek przed i po** (bez cięcia), energia nadal w krokach.
+- **Rozdział posiłków.** Suma dnia jak wcześniej: białko i tłuszcz z ustawień, węgle reszta, w granicach zakresu dnia (powyżej górnej nadwyżka idzie w tłuszcz). Posiłek dostaje węgle według kodu (LOW 0,4, MEDIUM 0,9, HIGH 1,35 g/kg, przekąska połowa), reszta węgli po równo na posiłki, a tłuszcz domyka równą energię posiłków (więcej w LOW, mało przy treningu). Odrzucone dosłowne „reszta energii głównie w tłuszczu”: w dzień 4 h jazdy dawało ok. 3,5 g/kg tłuszczu, a w dni wolne węgle spadały pod zakres po deficycie. Deficyt tnie węgle tylko do dolnej granicy zakresu dnia, dalej tłuszcz.
+- **Dwa kolejne posiłki główne poniżej ok. 450 kcal** (poza treningiem): mniejszy staje się przekąską 150–250 kcal (25% sumy), większy zostaje ten bliżej kolejnego treningu, bez treningu późniejszy.
+
 ## 19.11.2026 (noc)
 
 - **Deficyt w rytmie treningu (A+)**, spec `docs/superpowers/specs/2026-11-19-deficyt-kroki-design.md`. Udziały Tomasza: luźny 100%, średni 60%, wolny 60% (dzień regeneracji), mocny 0. Rozważone okna między treningami (B): wierniejsze, ale trudniejsze do sprawdzenia; badania nie rozstrzygają między A i B. A+ dodaje ostatni posiłek dnia mocnego, gdy jest 4 h po regeneracji i jutro nie ma mocnej jednostki.

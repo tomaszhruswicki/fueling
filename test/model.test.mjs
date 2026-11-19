@@ -234,3 +234,94 @@ test("przeliczenie: kafelki = cel dnia, brakujące makro bez kolejnych posiłkó
   assert.ok(Math.abs(L.cT - b.cT) < 0.01 && Math.abs(L.pT - b.pT) < 0.01 && Math.abs(L.fT - b.fT) < 0.01);
   assert.ok(L.live.missing.kcal > 0 && L.live.missing.c > 0);
 });
+
+// ---------- Deficyt v2 (spec 2026-11-20): przypadki z punktu 6, dane syntetyczne ----------
+const DESK = 2430, MASS = 74, LIM = M.cutLimits("mid");
+const V2 = { ...V, base: DESK, mass: MASS, floor: 1950 };
+const dayV2 = (sessions, base, extra = {}) => {
+  const act = sessions.filter(s => !s.off), type = extra.type || M.dayIntensity(act);
+  const c = M.dayDeficit({ desk: DESK, full: base + sum(act, "kcal"), type, lim: LIM, floor: V2.floor });
+  const p = M.planDay({ sessions }, { settings: { ...V2, base }, times: null, deficit: c.want, aplus: type === "aplus", eaMin: Math.round(30 * 0.85 * MASS), walks: extra.walks });
+  return { c, p };
+};
+const cfg74 = { ...cfg, mass: MASS };
+
+test("v2 dzień wolny ze spacerem: jedzenie prawie jak bez spaceru, deficyt maks. 300", () => {
+  const a = dayV2([], DESK), b = dayV2([], DESK + 200);
+  assert.equal(a.c.want, 150); assert.ok(Math.abs(a.p.target - 2280) < 1);
+  assert.equal(b.c.want, 300); assert.ok(b.p.target - a.p.target <= 50.5, "spacer +200 podnosi jedzenie najwyżej o 50");
+});
+
+test("v2 19.11 wędrówka 3 h: jedzenie ok. 2600, deficyt 300, posiłek przed i po wędrówce bez cięcia", () => {
+  const walk = { start: 10 * 60, durMin: 180 };
+  const { c, p } = dayV2([], DESK + 470, { walks: [walk] });
+  assert.equal(c.want, 300); assert.ok(Math.abs(p.target - 2600) < 1); assert.ok(p.def > 299);
+  const before = p.meals.filter(m => m.t <= walk.start).slice(-1)[0], after = p.meals.find(m => m.t >= walk.start + walk.durMin);
+  assert.ok(!before.cut && !after.cut);
+  const short = dayV2([], DESK + 470, { walks: [{ start: 10 * 60, durMin: 60 }] });
+  assert.ok(short.p.meals.filter(m => m.cut).length > 2, "krótki spacer nie chroni posiłków");
+});
+
+test("v2 luźna jazda 60 min: maks. deficyt 500, posiłki przy treningu bez zmian", () => {
+  const s = sess(ride(70, [step(60, 62)]), 17 * 60);
+  const { c, p } = dayV2([s], DESK), zero = M.planDay({ sessions: [s] }, { settings: V2, times: null });
+  assert.equal(c.want, 500); assert.equal(c.food, DESK + s.kcal - 500);
+  assert.ok(p.def > 400 && p.def <= 500.5);
+  for (const role of ["pre", "recovery"]) { const x = zero.meals.find(m => m.role === role), y = p.meals.find(m => m.role === role); assert.ok(Math.abs(x.kcal - y.kcal) < 0.5, role); }
+  assert.ok(!p.low, "węgle w zakresie dnia mimo deficytu");
+});
+
+test("v2 siłownia 60 min: deficyt 250, posiłki przy treningu nie przejmują energii dnia", () => {
+  const g = { ...M.analyzeSession(gym(71), cfg74), start: 17 * 60 };
+  const { c, p } = dayV2([g], DESK - 30);
+  assert.equal(c.want, 250); assert.ok(Math.abs(p.target - (DESK - 30 + g.kcal - 250)) < 1);
+  const tr = p.meals.filter(m => ["pre", "recovery"].includes(m.role)), rest = p.meals.filter(m => !["pre", "presnack", "recovery"].includes(m.role));
+  tr.forEach(m => assert.ok(m.kcal < 750, m.name + " " + Math.round(m.kcal)));
+  rest.forEach(m => assert.ok(m.kcal > 450, m.name + " " + Math.round(m.kcal)));
+  tr.forEach(m => assert.ok(m.c <= 1.6 * MASS, m.name + " węgle " + Math.round(m.c)));
+});
+
+test("v2 mocna niedziela: bez deficytu poza A+, kroki mocnego dnia 75% średniej", () => {
+  const hard = sess(ride(72, [step(20, 60), { reps: 5, steps: [step(5, 110), step(5, 50)] }, step(60, 70)]), 9 * 60);
+  const full = DESK + hard.kcal;
+  assert.equal(M.dayDeficit({ desk: DESK, full, type: "high", lim: LIM }).want, 0);
+  const ap = M.dayDeficit({ desk: DESK, full, type: "aplus", lim: LIM });
+  assert.equal(ap.want, LIM.rest, "A+: limit dnia wolnego");
+  const rows = [...Array(10)].map((_, i) => ({ steps: 10000, type: i < 7 ? "rest" : "low" })).concat([{ steps: 5000, type: "high" }]);
+  const pr = M.stepsByType(rows);
+  assert.ok(Math.abs(pr.high - 0.75 * pr.all) < 0.01, "za mało mocnych dni: 75% średniej");
+  assert.ok(Math.abs(pr.mid - 0.9 * pr.all) < 0.01);
+  assert.equal(pr.rest, 10000); assert.equal(pr.low, 10000);
+  const pr2 = M.stepsByType(rows.concat([{ steps: 6000, type: "high" }, { steps: 7000, type: "high" }]));
+  assert.equal(pr2.high, 6000, "min. 3 mocne dni: ich średnia");
+});
+
+test("v2 brak kroków w wellness: 7000 jako średnia, mocny 75%, średni 90%", () => {
+  const pr = M.stepsByType([]);
+  assert.equal(pr.measured, false); assert.equal(pr.all, 7000);
+  assert.equal(pr.high, 5250); assert.equal(pr.mid, 6300); assert.equal(pr.rest, 7000);
+  assert.equal(M.stepsByType([{ steps: 9000, type: "rest" }, { steps: 0, type: "rest" }]).all, 7000, "mniej niż 3 dni: domyślne");
+});
+
+test("v2 limity: poziomy, własny proporcjonalnie, Zmęczenie, minimum dnia wolnego", () => {
+  assert.deepEqual([M.cutLimits("light").low, M.cutLimits("strong").rest, M.cutLimits("mid").mid], [400, 350, 250]);
+  const own = M.cutLimits("custom", 400); assert.deepEqual([own.low, own.rest, own.mid], [400, 240, 200]);
+  assert.equal(M.dayDeficit({ desk: DESK, full: DESK + 600, type: "low", lim: LIM, tired: true }).want, 150);
+  assert.equal(M.dayDeficit({ desk: DESK, full: DESK, type: "mid", lim: LIM }).want, 0, "średni: bez deficytu bazowego");
+  const f = M.dayDeficit({ desk: 2000, full: 2100, type: "rest", lim: LIM, floor: 2000 });
+  assert.equal(f.want, 100); assert.ok(f.floorHit);
+});
+
+test("v2 dwa kolejne małe posiłki: przekąska 150–250 i większy posiłek bliżej treningu", () => {
+  const kc = m => 4 * m.p + 4 * m.c + 9 * m.f;
+  const mk = (t, name) => { const m = { t, name, role: "meal", kind: "main", code: "L", p: 30, c: 40, f: 12, ml: 450 }; m.kcal = kc(m); return m; };
+  const meals = [mk(420, "Śniadanie"), mk(660, "II śniadanie"), { t: 900, role: "pre", kind: "main", p: 40, c: 100, f: 10, ml: 450, name: "Obiad przed treningiem" }];
+  meals[2].kcal = kc(meals[2]);
+  const tot = meals[0].kcal + meals[1].kcal;
+  M.mergeSmall(meals, [{ start: 1080 }], kc);
+  assert.equal(meals[0].kind, "snack"); assert.ok(meals[0].kcal >= 150 && meals[0].kcal <= 250);
+  assert.ok(Math.abs(meals[0].kcal + meals[1].kcal - tot) < 0.5, "energia zachowana");
+  const dinner = [mk(900, "Posiłek"), mk(1140, "Kolacja")];
+  M.mergeSmall(dinner, [], kc);
+  assert.equal(dinner[0].kind, "snack", "bez treningu większa zostaje kolacja");
+});

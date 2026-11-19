@@ -166,14 +166,17 @@ function liveNote(d) {
   if (d.orig && d.date < todayISO()) return `<p class="small muted">Plan z wykonania. Według planu treningów było ${kfmt(d.orig.target)} kcal.</p>`;
   return "";
 }
-// Uzasadnienie deficytu dnia (spec 2026-11-19): intensywność, udział, ograniczenia.
+// Uzasadnienie deficytu dnia (spec 2026-11-20): jedzenie od dnia przy biurku, limit typu dnia, ograniczenia.
 function deficitWhy(d, p, v) {
   if (!v.cutOn) return "Bilans na zero.";
   if (S.ov.skip[d.date]) return "Deficyt wyłączony ręcznie na ten dzień.";
   if (d.tomorrowKey) return "Jutro mocny trening: dziś bez deficytu, żeby wejść w niego z pełnym zapasem.";
-  const lim = p.cutLimit === "ea" ? ` Ograniczony przez próg dostępności energii: min. ${kfmt(v.eaMin)} kcal po odjęciu treningu${v.ffmMeasured ? "" : " (masa beztłuszczowa przyjęta jako 85% masy, wpisz % tkanki tłuszczowej w Ustawieniach)"}.` : p.cutLimit === "meals" && p.def < d.want - 20 ? ` Więcej się nie zmieści: posiłki są na minimum albo cięte o 30%.` : "";
+  const c = d.cut;
+  const lim = p.cutLimit === "ea" ? ` Ograniczony przez próg dostępności energii: min. ${kfmt(v.eaMin)} kcal po odjęciu treningu${v.ffmMeasured ? "" : " (masa beztłuszczowa przyjęta jako 85% masy, wpisz % tkanki tłuszczowej w Ustawieniach)"}.` : p.cutLimit === "meals" && p.def < d.want - 20 ? ` Więcej się nie zmieści: posiłki są na minimum albo cięte o 30%.` : c && c.floorHit ? ` Ograniczony przez minimum dnia bez treningu (${kfmt(v.floor)} kcal).` : "";
   if (d.aplus) return (p.def > 0 ? `Dzień mocny: deficyt −${r10(p.def)} kcal tylko w ostatnim posiłku, min. 4 h po regeneracji.` : "Dzień mocny: bez deficytu (ostatni posiłek za blisko regeneracji).") + lim;
-  return `Dzień ${INT[d.intensity]}: ${Math.round(d.share * 100)}% udziału w deficycie tygodnia${p.def > 0 ? `, −${r10(p.def)} kcal z posiłków LOW i MEDIUM z dala od treningu` : ""}.` + lim;
+  if (!c || !c.md) return `Dzień ${INT[d.intensity]}: bez deficytu, posiłki przy treningu bez zmian.`;
+  const rule = c.bd ? `większa z wartości: dzień przy biurku ${kfmt(c.desk)} − ${r10(c.bd)} albo wydatek dnia ${kfmt(c.full)} − ${r10(c.md)}` : `wydatek dnia ${kfmt(c.full)} − maks. ${r10(c.md)}, nie mniej niż dzień przy biurku ${kfmt(c.desk)}`;
+  return `Dzień ${INT[d.intensity]}: jedzenie to ${rule}.${p.def > 0 ? ` Deficyt −${r10(p.def)} kcal z posiłków LOW i MEDIUM z dala od treningu.` : ""}` + lim;
 }
 function renderDay() {
   const d = R.show.find(x => x.date === S.sel) || R.show[0], v = R.v, p = d.plan;
@@ -202,7 +205,7 @@ function renderDay() {
     ${liveNote(d)}
     <p class="band ${p.low ? "low" : ""}">Zakres węgli dla tego dnia: ${p.band.label}, ${p.band.lo}–${p.band.hi} g/kg.${p.low ? " Plan jest poniżej zakresu: podnieś utrzymanie albo wyłącz deficyt." : ""}</p>
     <p class="small muted">${why} Utrzymanie ${kfmt(p.maint - p.train)} kcal (kroki: ${kfmt(d.steps.steps)}, ${d.steps.src}), trening ${kfmt(p.train)} kcal${d.done.length ? " (z wykonania)" : ""}, w trakcie ${r5(p.intra)} g węgli.</p>
-    ${d.walks.length ? `<p class="small muted">${d.walks.map(w => esc(w.name || w.type)).join(", ")}: liczone w krokach, nie jako trening.</p>` : ""}
+    ${d.walks.length ? `<p class="small muted">${d.walks.map(w => esc(w.name || w.type)).join(", ")}: liczone w krokach, nie jako trening${d.walks.some(w => (+w.moving_time || +w.elapsed_time || 0) >= M.K.WALK_GUARD_MIN * 60) ? "; posiłek przed i po bez cięcia" : ""}.</p>` : ""}
     ${d.notes.length ? `<p class="small"><b>W kalendarzu:</b> ${d.notes.map(esc).join(" · ")}</p>` : ""}
     ${dayLine(d, v)}
   </div>
@@ -246,7 +249,7 @@ function renderWeek() {
     <div class="stat"><span>Średnio dziennie</span><b>${kfmt(sum(d => d.plan.target) / 7)} kcal</b></div>
     <div class="stat"><span>Węgle średnio</span><b>${fmt(sum(d => d.plan.cKg) / 7)} g/kg</b></div>
     <div class="stat"><span>Trening</span><b>${fmt(hrs, 1)} h · ${kfmt(kj)} kJ</b></div>
-    <div class="stat"><span>${surT > defT ? "Nadwyżka" : "Deficyt"} tygodnia</span><b>${surT > defT ? "+" + kfmt(surT) : defT ? "−" + kfmt(defT) : "0"} kcal</b>${v.cutOn && surT <= defT ? `<small class="muted" style="display:block;font-weight:400">cel ${R.budget.mode === "cap" ? "do " : ""}${kfmt(R.budget.weekly)} (${R.budget.label.toLowerCase()})</small>` : ""}</div>
+    <div class="stat"><span>${surT > defT ? "Nadwyżka" : "Deficyt"} tygodnia</span><b>${surT > defT ? "+" + kfmt(surT) : defT ? "−" + kfmt(defT) : "0"} kcal</b>${v.cutOn && surT <= defT && defT ? `<small class="muted" style="display:block;font-weight:400">ok. ${fmt((defT - surT) / M.K.KCAL_PER_KG, 2)} kg/tydz. (${R.lim.label.toLowerCase()})</small>` : ""}</div>
   </div>`;
   $("weekRows").innerHTML = show.map(d => {
     const p = d.plan, base = v.base / max * 100, tr = Math.max(0, p.train) / max * 100, sp = p.surplus / max * 100, cut = p.def / max * 100;

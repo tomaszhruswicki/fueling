@@ -2,7 +2,7 @@
 import * as M from "./model.js";
 import { S, DEF, MODES, hooks, getKey, setKey, changed, applyUserData, wipe } from "./store.js";
 import { api, errText, backupPayload } from "./intervals.js";
-import { maintenance, eff, autoTimes, tStr, calibrationInfo, cutBudget, CUT_LEVELS, CAL_DAYS, CAL_MIN_KCAL, CAL_MIN_W } from "./calc.js";
+import { maintenance, eff, autoTimes, tStr, calibrationInfo, CAL_DAYS, CAL_MIN_KCAL, CAL_MIN_W } from "./calc.js";
 import { $, esc, fmt, kfmt, num, todayISO, dnum, DOWN } from "./util.js";
 
 const render = () => hooks.render();
@@ -46,7 +46,7 @@ function renderMaint() {
   const rows = [
     ["Spoczynkowa przemiana materii (RMR)", `${kfmt(m.rmr)} kcal`, m.rmrEq === "Cunningham" ? `Cunningham, masa beztłuszczowa ${fmt(m.ffm)} kg` : `ten Haaf 2014: ${fmt(m.mass)} kg, ${Math.round(m.height * 100)} cm, ${m.age} lat`],
     ["Dzień siedzący, ×1,2", `${kfmt(m.rmr * 1.2)} kcal`, "z termogenezą posiłków"],
-    ["Kroki", `+${kfmt(m.stepKcal)} kcal`, m.steps ? `średnio ${kfmt(m.steps)} dziennie z ostatnich dni w Intervals; dziś i dni minione liczą się z kroków danego dnia` : "brak kroków w Intervals, przyjęto 7000"],
+    ["Kroki", `+${kfmt(m.stepKcal)} kcal`, m.steps ? `średnio ${kfmt(m.steps)} dziennie z 28 dni w Intervals; dni przyszłe według średniej dni tego samego typu (mocny, średni, luźny, wolny), dziś i dni minione z kroków danego dnia` : "brak kroków w Intervals, przyjęto 7000"],
     ["Wynik kalkulatora", `<b>${kfmt(m.formula)} kcal</b>`, ""],
     ["Z Twoich danych", c ? `<b>${kfmt(c.base)} kcal</b>` : "–", c ? `${c.n} dni z kcal, ${c.nw} pomiarów wagi, trend ${fmt(c.dW, 2)} kg; wydatek całkowity ${kfmt(c.tdee)}, trening ${kfmt(c.train)} (${c.src === "wykonanie" ? "z wykonania" : "z planu"})${c.skipped ? `, pominięto ${c.skipped} niewiarygodnych dni` : ""}` : `potrzeba min. ${CAL_MIN_KCAL} dni z kcal i ${CAL_MIN_W} pomiarów wagi z ${CAL_DAYS} dni (teraz ${info.n} i ${info.nw})`],
   ];
@@ -72,7 +72,7 @@ const MEAL_FIELDS = [
   ["minMeal", "Minimum posiłku, kcal", "10", () => `propozycja ${M.suggestMinMeal(eff().base, S.settings.meals)}`],
   ["wake", "Pobudka", "time"], ["sleep", "Sen", "time"], ["wkTime", "Trening w tygodniu", "time"], ["weTime", "Trening w weekend", "time"],
 ];
-const CUT_CUSTOM = [["weekly", "Deficyt na tydzień, kcal", "50"], ["cap", "Maks. deficyt dnia, kcal", "25"]];
+const CUT_CUSTOM = [["lowMax", "Maks. deficyt dnia z luźnym treningiem, kcal", "50"]];
 const CUT_FLOOR = [["floor", "Minimum dnia bez treningu, kcal", "10", () => `auto ${maintenance().floor}`]];
 function fieldHtml([k, label, step, hint]) {
   const val = S.settings[k] ?? "", isT = step === "time";
@@ -87,8 +87,9 @@ export function renderSettings() {
     $("setFields").innerHTML = FIELDS.map(fieldHtml).join("");
     $("mealFields").innerHTML = MEAL_FIELDS.map(fieldHtml).join("");
     const v = eff(), lvl = S.settings.cutLevel;
-    const opt = (k, [pct, l, mode]) => { const b = cutBudget({ ...v, cutLevel: k }); return `<option value="${k}" ${lvl === k ? "selected" : ""}>${l}: ${fmt(pct * 100, 2)}% masy/tydz., ok. ${kfmt(b.weekly)} kcal${mode === "cap" ? " (sufit)" : ""}</option>`; };
-    $("cutFields").innerHTML = `<label>Poziom<select id="cutLevel">${Object.entries(CUT_LEVELS).map(([k, x]) => opt(k, x)).join("")}<option value="custom" ${lvl === "custom" ? "selected" : ""}>Własny</option></select></label>` + (lvl === "custom" ? CUT_CUSTOM.map(fieldHtml).join("") : "") + CUT_FLOOR.map(fieldHtml).join("");
+    const opt = (k, x) => `<option value="${k}" ${lvl === k ? "selected" : ""}>${x.label}: luźny do ${x.low}, wolny do ${x.rest}, średni do ${x.mid}</option>`;
+    const L = M.cutLimits(lvl, S.settings.lowMax);
+    $("cutFields").innerHTML = `<label>Poziom<select id="cutLevel">${Object.entries(M.CUT_LEVELS).map(([k, x]) => opt(k, x)).join("")}<option value="custom" ${lvl === "custom" ? "selected" : ""}>Własny</option></select></label>` + (lvl === "custom" ? CUT_CUSTOM.map(fieldHtml).join("") + `<p class="small muted">Wychodzi: luźny do ${L.low}, wolny do ${L.rest}, średni do ${L.mid} kcal.</p>` : "") + CUT_FLOOR.map(fieldHtml).join("");
     document.querySelectorAll("[data-set]").forEach(el => el.onchange = () => {
       const k = el.dataset.set; let val = el.type === "time" ? el.value : num(el.value);
       if (el.type === "time" && val) val = val.replace(/^0(\d)/, "$1");
