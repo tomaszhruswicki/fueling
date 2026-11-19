@@ -66,8 +66,9 @@
         <label>Tłuszcz, g<input id="logF" type="text" inputmode="numeric"></label>
         <label class="end"><button class="btn primary" type="submit">Zapisz w Intervals</button></label>
       </form>
-      <p class="small muted" id="logStatus" aria-live="polite">Zapis trafia do wellness w Intervals tego dnia.</p>
+      <p class="small muted" id="logStatus" aria-live="polite">Zapis wysyła do wellness w Intervals tylko pola, które zmienisz.</p>
       <div class="cmp" id="logCmp"></div>
+      <div id="logCheck"></div>
       <p class="small muted" id="logMode"></p>
     </div>
     <div class="card"><h2>Waga</h2>
@@ -93,7 +94,7 @@
       <div class="fields one" id="baseManual" hidden><label>Utrzymanie, kcal<input id="baseVal" type="text" inputmode="numeric"></label></div>
       <div class="calc" id="maintCalc"></div>
       <p class="small" id="maintNow"></p>
-      <p class="small muted">Trening dolicza się osobno z planu w Intervals. Automatycznie: wynik kalkulatora, a po zebraniu danych z Dziennika średnia kalkulatora i Twoich danych. Kalkulator ma błąd ok. 10%, dane z wagi i kcal go zawężają.</p>
+      <p class="small muted">Trening dolicza się osobno: z planu w Intervals, a po wgraniu aktywności z wykonania. Automatycznie: wynik kalkulatora, a po zebraniu danych z Dziennika średnia kalkulatora i Twoich danych. Kalkulator ma błąd ok. 10%, dane z wagi i kcal go zawężają.</p>
     </div>
     <div class="card">
       <h2>Posiłki i rytm dnia</h2>
@@ -133,6 +134,7 @@
         <p>Spalanie węglowodanów liczone jest dla każdego kroku osobno, według udziału węglowodanów zależnego od %FTP (ok. 45% przy 50% FTP, 65% przy 70%, 95% przy 100% FTP). Dzięki temu trening z mocną częścią na początku i długim tlenem dostaje więcej węgli niż sugerowałoby niskie IF.</p>
         <p>Jedzenie w trakcie jazdy jest rozpisane na odcinki po 30 minut. Podaż pokrywa ok. połowy spalania i wyprzedza mocne fragmenty. Limit to 60 g/h do 90 minut i 90 g/h powyżej. Treningi do ok. 65 minut: bez jedzenia, chyba że mają co najmniej 10 minut powyżej 88% FTP.</p>
         <p>Posiłki mają kod węglowodanów. HIGH: przed jakością i po niej oraz wieczór przed dniem jakości. MEDIUM: przed i po lżejszym treningu. LOW: posiłki z dala od treningu. Białko jest rozłożone równo, tłuszcz trafia głównie do posiłków LOW. Model opiera się na podejściu „fuel for the work required” (Impey i in. 2018, LJMU) i zakresach węglowodanów dla sportowców (Burke i in. 2011).</p>
+        <p>Po wgraniu aktywności do Intervals dzień przelicza się z wykonania: energia z pracy (kJ) albo z kalorii urządzenia, węgle w trakcie z pola „carbs” w Intervals (bez wpisu: podaż z planu). Posiłki, których pora minęła, liczone są jak zjedzone według planu. Różnicę przejmują kolejne posiłki; posiłek przed treningiem i regeneracja nie oddają węgli, żaden posiłek nie schodzi poniżej minimum. Dzień miniony bez wykonania treningu liczony jest bez niego.</p>
         <p>Siłownia: ok. 280 kcal/h, bieg: ok. 10 kcal/min. Treningi bez rozpisanych kroków liczone są ze średniej mocy albo z IF. Gdy brakuje obu, aplikacja przyjmuje założenie i oznacza je w widoku dnia.</p>
         <p>Szacunki mają błąd ok. 10–15%. To narzędzie wspierające planowanie, nie porada dietetyczna ani medyczna.</p>
       </div>

@@ -221,3 +221,12 @@ input.sw:checked::after{transform:translateX(18px)}
 .ti .node{flex:none;align-self:flex-start}
 .node.n-sess{width:10px;height:16px;border-radius:3px;background:var(--ink);margin-top:12px}
 .wlabel small{display:block;font-size:.72rem;font-weight:500;color:var(--muted);line-height:1.2}
+/* Przeliczenie po treningu */
+.meal.past{opacity:.55}
+.meal .adj{font-size:.75rem;color:var(--violet-text);font-weight:600}
+.code.c-done{background:var(--ink);color:var(--on-ink)}
+.code.c-past{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.chip.done{background:var(--ink);color:var(--on-ink)}
+.sess.done{background:var(--bg)}
+.node.n-done{width:10px;height:16px;border-radius:3px;background:var(--muted);margin-top:12px}
+.signal.live{margin:4px 0}

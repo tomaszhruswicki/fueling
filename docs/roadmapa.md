@@ -2,37 +2,42 @@
 
 Stan na 19.11.2026. Szacunki to czas pracy z Claude, bez testu na telefonie (ok. 5 min na zmianę).
 
+## Zrobione 19.11.2026
+
+A1, A2, A3, A4, A5, B1, B2, B3, C1. Szczegóły w `docs/decyzje.md`.
+
 ## Proponowana kolejność
 
-1. A1 i A2: dane w Dzienniku przestają się psuć (35 min).
-2. B1: testy modelu, zanim zmienimy w nim cokolwiek więcej (1–1,5 h).
-3. A3 i A4: jedna, poprawna kalibracja utrzymania (1 h 15 min).
-4. C1: przeliczanie dnia po wykonanym treningu, czyli główna luka wobec Hexis Live (2–3 h).
-5. A5 i B2: skrypt wydania i podział `app.js` (2 h).
+1. E: test na iPhonie z prawdziwym kluczem, w tym przeliczenie po treningu na prawdziwej aktywności (15 min).
+2. A7: decyzja o deficycie w dni treningowe (30 min rozmowy, 30 min kodu).
+3. B4: wydatek siłowni i biegu przez masę ciała albo z kalorii aktywności (30 min).
+4. C2: plan a wykonanie w widoku Tydzień (1 h).
 
 Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 
 ## A. Błędy i ryzyka danych
 
-1. **Dziennik zapisuje wszystkie wstępnie wypełnione pola**, nie tylko zmienione. Przy podwojonych danych z Garmina utrwala błąd w wellness (tak było 16.11). Poprawka: wysyłać tylko pola zmienione przez użytkownika. 15 min.
-2. **Brak kontroli wiarygodności dnia.** Ostrzeżenie, gdy kcal nie zgadzają się z makro (4/4/9) o ponad 10% albo są ponad 1,8 raza wyższe od planu. Takie dni pomijane w kalibracji. 20 min.
-3. **Dwie różne kalibracje.** Ustawienia liczą z 28 dni i półśrednich wagi, Dziennik z 21 dni i średniej 7-dniowej. Mogą pokazywać różne liczby. Jedna funkcja, jeden wynik w obu miejscach. 30 min.
-4. **Kalibracja odejmuje trening z planu, nie z wykonania.** Pominięty albo skrócony trening zawyża wyliczone utrzymanie. Pobierać wykonane aktywności (kJ z Intervals) za 28 dni. 45 min.
-5. **Ręczne podbijanie wersji w `sw.js`.** Łatwo zapomnieć, wtedy telefon pokazuje starą wersję. Skrypt `tools/release.sh`: podbija wersję, szuka w zmianach kluczy i danych osobowych, commit, push. 20 min.
+1. ~~Dziennik zapisuje wszystkie wstępnie wypełnione pola.~~ Zrobione: wysyła tylko zmienione pola. Czyszczenia pola aplikacja nie obsługuje (poprawka w Intervals).
+2. ~~Brak kontroli wiarygodności dnia.~~ Zrobione: ostrzeżenie w Dzienniku, takie dni pomijane w kalibracji. Próg 10% łapie też dni z dużą ilością błonnika lub alkoholu w Fitatu; do obserwacji.
+3. ~~Dwie różne kalibracje.~~ Zrobione: jedna funkcja w `calc.js` (28 dni, trend masy z regresji liniowej).
+4. ~~Kalibracja odejmuje trening z planu.~~ Zrobione: z wykonanych aktywności z 29 dni; bez nich z planu.
+5. ~~Ręczne podbijanie wersji w `sw.js`.~~ Zrobione: `tools/release.sh`.
+7. **Deficyt w dzień treningowy wynosi zwykle 0.** Posiłki LOW mają stałe 0,4 g/kg węgli i są dobijane do minimum posiłku, a deficyt bierze tylko z LOW i nie schodzi poniżej minimum. Efekt: deficyt działa praktycznie tylko w dni wolne. Opcje: brać deficyt także z tłuszczu posiłków MEDIUM albo liczyć minimum posiłku LOW niżej. Decyzja Tomasza. 30 min po decyzji.
+8. **Pola aktywności niesprawdzone na prawdziwym koncie.** Przeliczenie używa `icu_joules`, `calories`, `carbs_ingested`, `paired_event_id` z `/activities`. Aktywności ze Stravy przychodzą przez API bez danych i są pomijane. Sprawdzić przy teście E.
 6. **Kopia ustawień nadpisuje całość** (wygrywa nowszy zapis). Zmiany na dwóch urządzeniach w krótkim odstępie mogą się zgubić. Przy jednym użytkowniku do przyjęcia. Scalanie per pole dopiero przy zawodnikach. 1 h.
 
 ## B. Porządek kodu
 
-1. **Testy `model.js`** (`node --test`, bez zależności): kJ z kroków zgodne z Intervals, bloki 30 min, timeline dla 3–6 posiłków i treningu rano, w południe i wieczorem, deficyt nigdy przed jakością, minimum dnia i posiłku, ładowanie przed startem. Dane syntetyczne, nie z Intervals. 1–1,5 h.
-2. **Podział `app.js` (708 linii)** na moduły: pamięć i stan, API i kopia ustawień, utrzymanie, widoki Dzień, Tydzień, Dziennik, Ustawienia. 1,5–2 h, po testach.
-3. **Stałe modelu w jednym miejscu** ze źródłami: progi 88% i 105% FTP, 90 kcal/h w utrzymaniu, krzywa udziału węglowodanów, ml/kg. 30 min.
+1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 26 testów, `node --test`).
+2. ~~Podział `app.js`~~ Zrobione: `util`, `store`, `intervals`, `calc`, `log`, `settings`, `app`.
+3. ~~Stałe modelu w jednym miejscu~~ Zrobione: `K` w `model.js`. Krzywe udziału węglowodanów zostają przy funkcjach.
 4. **Wydatek siłowni i biegu stały** (280 kcal/h, 10 kcal/min) niezależnie od masy. Przeliczać przez masę ciała albo brać kJ/kcal z wykonanej aktywności. 30 min.
 5. **Opis modelu tylko w `index.html`.** Przenieść do `docs/model.md`, w aplikacji zostawić skrót. 30 min.
 6. **Domyślny wiek 35 i płeć M**, gdy Intervals ich nie poda. Dla jednego użytkownika bez znaczenia, przy zawodnikach do onboardingu (D).
 
 ## C. Funkcje
 
-1. **Przeliczenie dnia po treningu (Hexis Live).** Po wgraniu aktywności regeneracja i kolejne posiłki liczą się z rzeczywistych kJ i czasu. Wymaga pobierania wykonanych aktywności (wspólne z A4). 2–3 h.
+1. ~~Przeliczenie dnia po treningu (Hexis Live).~~ Zrobione. Dalszy krok: uwzględnić zjedzone z Dziennika zamiast założenia „minione posiłki zjedzone według planu”, gdy kcal z dziś są wpisane w trakcie dnia.
 2. **Plan a wykonanie w widoku Tydzień:** kcal i węgle z planu obok danych z Fitatu, z oznaczeniem wykonanych treningów. 1 h.
 3. **Test potu:** waga przed i po jeździe plus wypite płyny dają potliwość. Średnia z kilku testów, osobno trenażer i jazda na zewnątrz, zamiast stałych 0,9 l/h. 1 h.
 4. **Ostrzeżenie o niskiej dostępności energii:** zjedzone minus wydatek treningowy na kg beztłuszczowej masy ciała poniżej ok. 30 kcal przez kilka dni z rzędu. Wymaga C1/A4 i % tkanki tłuszczowej. 1 h.

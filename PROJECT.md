@@ -18,20 +18,23 @@ Użytkownik: Tomasz (od 19.11.2026). Udostępnienie zawodnikom movementcare to o
 
 ## Architektura
 
-- `model.js`: obliczenia bez DOM (analiza treningu, bloki 30 min, timeline, alokacja makro, deficyt, ładowanie).
-- `app.js`: stan, synchronizacja z Intervals, kopia ustawień, kalkulator utrzymania, wszystkie widoki.
+- `model.js`: obliczenia bez DOM i stanu (analiza treningu i wykonanej aktywności, bloki 30 min, timeline, alokacja makro, deficyt, ładowanie, przeliczenie reszty dnia, kontrola wpisu). Stałe w `K`. Testy w `test/` (`node --test`).
+- `calc.js`: obliczenia na stanie (utrzymanie, jedna kalibracja, treningi dnia z planu i wykonania, plan tygodnia).
+- `app.js`: widoki Dzień i Tydzień, eksport, odświeżanie. `log.js`: Dziennik. `settings.js`: Ustawienia.
+- `store.js`: stan i localStorage. `intervals.js`: API, pobieranie, kopia ustawień. `util.js`: formatowanie i daty.
 - `index.html`, `app.css`: interfejs. `sw.js`, `manifest.webmanifest`, `icons/`: PWA.
 - `tools/serve.mjs`: lokalny podgląd (`node tools/serve.mjs . 8765`, konfiguracja `fueling` w `.claude/launch.json`). `tools/icons.mjs`: ikony.
 
 ## Wdrożenie
 
-GitHub Pages z gałęzi `main` (repo `tomaszhruswicki/fueling`, publiczne). DNS: CNAME `fueling` na `tomaszhruswicki.github.io` w dPanelu dhosting. Przed każdym `git push` podnieś `V` w `sw.js` i sprawdź, czy w zmianach nie ma danych osobowych ani sekretów. Push publikuje od razu.
+GitHub Pages z gałęzi `main` (repo `tomaszhruswicki/fueling`, publiczne). DNS: CNAME `fueling` na `tomaszhruswicki.github.io` w dPanelu dhosting. Wydanie: `tools/release.sh "opis"` (testy, kontrola danych osobowych i sekretów, podbicie `V` w `sw.js`, commit, push). Push publikuje od razu.
 
 ## Stan (19.11.2026)
 
-- Działa: Dzień (timeline, posiłki z makro i płynami, trening z podażą w blokach 30 min), Tydzień, Dziennik (waga, kcal i makro do wellness), Ustawienia (utrzymanie, posiłki i pory, deficyt, tryby z historią, priorytet), wysyłanie planu do Intervals, odświeżanie przy otwarciu i co 5 min.
-- Sprawdzone lokalnie w widoku telefonu. Na iPhonie z prawdziwym kluczem jeszcze nie.
-- Znany błąd: Dziennik wysyła przy zapisie wszystkie wstępnie wypełnione pola (szczegóły w roadmapie, pozycja 1).
+- Działa: Dzień (timeline, posiłki z makro i płynami, trening z podażą w blokach 30 min, przeliczenie reszty dnia po wykonanym treningu), Tydzień, Dziennik (waga, kcal i makro do wellness, tylko zmienione pola, kontrola wiarygodności), Ustawienia (utrzymanie z jedną kalibracją z wykonania, posiłki i pory, deficyt, tryby z historią, priorytet), wysyłanie planu do Intervals.
+- Odświeżanie: przy otwarciu, po powrocie do aplikacji (po 2 min), co 5 min, a co 2 min, gdy dzisiejszy trening powinien się już skończyć, a aktywności jeszcze nie ma.
+- Sprawdzone lokalnie w widoku telefonu na danych syntetycznych. Na iPhonie z prawdziwym kluczem jeszcze nie, w tym pola aktywności z `/activities` (`icu_joules`, `carbs_ingested`, `paired_event_id`).
+- Znane ograniczenie: w dzień treningowy deficyt zwykle wynosi 0 (roadmapa A7).
 
 ## Dokumenty
 

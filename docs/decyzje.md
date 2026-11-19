@@ -2,6 +2,16 @@
 
 Najnowsze na górze. Każda z datą i powodem, żeby nie otwierać ich ponownie bez nowego argumentu.
 
+## 19.11.2026 (wieczór)
+
+- **Przeliczenie dnia po treningu.** Aktywność z Intervals zastępuje trening z planu (najpierw `paired_event_id`, potem ten sam rodzaj sportu tego dnia); niezaplanowana dochodzi osobno. Energia z `icu_joules`, inaczej z kalorii urządzenia minus 90 kcal/h. Charakter treningu (jakość, długi) zostaje z planu, gdy wykonanie trwało min. 70% planu, bo z samej aktywności nie znamy minut ≥ 88% FTP. Posiłki, których pora minęła, liczone jak zjedzone według planu; różnicę przejmują kolejne posiłki, posiłek przed i regeneracja nie oddają węgli, nic poniżej minimum. Gdy kolejnych posiłków nie ma, aplikacja pisze, ile brakuje. Powód: główna luka wobec Hexis Live.
+- **Węgle w trakcie z pola „carbs” w Intervals**, bez wpisu z planu proporcjonalnie do czasu, a dla jazdy poza planem ok. 40 g/h powyżej 75 min. Powód: zakładanie zera zawyżałoby regenerację po każdej jeździe.
+- **Dni minione liczone z wykonania**, trening bez aktywności nie wchodzi do bilansu. Dziennik porównuje zjedzone z planem z wykonania.
+- **Odświeżanie bez serwera:** przy otwarciu, po powrocie do aplikacji po 2 min, co 5 min, a co 2 min, gdy dzisiejszy trening powinien się skończyć, a aktywności nie ma (do 4 h). iOS wstrzymuje liczniki PWA w tle, więc w praktyce przeliczenie pojawia się po otwarciu aplikacji. Powiadomienia push odrzucone (wymagają serwera).
+- **Dziennik wysyła tylko zmienione pola** i ostrzega przy kcal niezgodnych z makro o ponad 10% lub ponad 1,8 × planu. Takie dni nie wchodzą do kalibracji.
+- **Jedna kalibracja utrzymania** dla Ustawień i Dziennika: 28 dni, trend masy z regresji liniowej, trening z wykonania.
+- **Podział kodu na moduły ES** bez narzędzi budujących i testy `node --test` bez zależności. Zasada „żadnych zewnętrznych bibliotek” bez zmian.
+
 ## 19.11.2026
 
 - **Repozytorium w `~/Developer/fueling`.** Wcześniej `Personal AI/Moj Trening/fueling-app` w iCloud. Kod z gitem nie powinien leżeć w iCloud (ryzyko uszkodzenia `.git` przy synchronizacji), a repozytoria movementcare są w `~/Developer`.

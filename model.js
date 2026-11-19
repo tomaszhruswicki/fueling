@@ -2,6 +2,22 @@
 // Zasady: energia z pracy mechanicznej (kJ ≈ kcal wydatku), udział węglowodanów zależny od %FTP każdego kroku,
 // węgle dopasowane do pracy (fuel for the work required, Impey i in. 2018), kodowanie posiłków LOW/MEDIUM/HIGH.
 
+// Stałe modelu w jednym miejscu. Zmiana tutaj zmienia cały model.
+export const K = {
+  HARD: 0.88,          // próg „mocno” (%FTP): minuty liczone do węgli przed treningiem i krótkiej podaży
+  VO2: 1.05,           // próg VO2max (%FTP)
+  MAINT_KCAL_H: 90,    // część wydatku na treningu już zawarta w utrzymaniu (kcal/h)
+  GYM_KCAL_H: 280,     // siłownia, stała (roadmapa B4: przeliczać przez masę)
+  RUN_KCAL_MIN: 10,    // bieg, stała (roadmapa B4)
+  OTHER_KCAL_MIN: 6,   // inne aktywności
+  FLUID_ML_KG: 35,     // płyny dzienne poza treningiem (ml/kg)
+  PRE_ML_KG: 6,        // płyny w posiłku przed treningiem, ACSM 5–7 ml/kg
+  REHYDRATE: 1.5,      // po treningu 150% niedoboru płynów (ACSM)
+  KCAL_PER_KG: 7700,   // energia 1 kg masy ciała przy kalibracji
+  SNACK_MIN: 150,      // minimum przekąski (kcal)
+  MIN_ACT_SEC: 600,    // aktywność krótsza niż 10 min nie zmienia planu
+};
+
 export const RIDES = new Set(["Ride", "VirtualRide", "MountainBikeRide", "GravelRide", "EBikeRide", "TrackRide", "Cyclocross", "Velomobile"]);
 const RUNS = new Set(["Run", "VirtualRun", "TrailRun"]);
 
@@ -79,7 +95,7 @@ export function fuelBlocks(segs, ftp, totalSec) {
     while (left > 0) {
       const b = Math.min(n - 1, Math.floor(cur / B)), room = Math.min(left, (b + 1) * B - cur);
       burn[b] += kcalPerSec * room * f / 4;
-      if (s.w / ftp >= 0.88) hard[b] += room;
+      if (s.w / ftp >= K.HARD) hard[b] += room;
       cur += room; left -= room;
     }
     t += s.dur;
@@ -128,8 +144,8 @@ export function analyzeSession(ev, cfg) {
     durSec = segs.reduce((a, s) => a + s.dur, 0);
     const kj = segs.reduce((a, s) => a + s.w * s.dur, 0) / 1000;
     const cho = segs.reduce((a, s) => a + s.w * s.dur / 1000 * choFraction(s.w / ftp) / 4, 0);
-    const hardMin = segs.filter(s => s.w / ftp >= 0.88).reduce((a, s) => a + s.dur, 0) / 60;
-    const vo2Min = segs.filter(s => s.w / ftp >= 1.05).reduce((a, s) => a + s.dur, 0) / 60;
+    const hardMin = segs.filter(s => s.w / ftp >= K.HARD).reduce((a, s) => a + s.dur, 0) / 60;
+    const vo2Min = segs.filter(s => s.w / ftp >= K.VO2).reduce((a, s) => a + s.dur, 0) / 60;
     const blocks = fuelBlocks(segs, ftp, durSec);
     const prio = !!cfg.prio;
     if (prio && durSec > 65 * 60) {
@@ -144,16 +160,16 @@ export function analyzeSession(ev, cfg) {
     const s = {
       ...base, durSec, ride: true, source, segs, kj: Math.round(kj), cho: Math.round(cho), hardMin: Math.round(hardMin), vo2Min: Math.round(vo2Min),
       blocks, intra, gph: h ? Math.round(intra / h) : 0, avgW, prio,
-      kcal: kj - 90 * h, // kJ ≈ kcal wydatku, minus część już zawarta w utrzymaniu
+      kcal: kj - K.MAINT_KCAL_H * h, // kJ ≈ kcal wydatku, minus część już zawarta w utrzymaniu
       long, high, key: high || long, demand: high || long ? "high" : durSec >= 75 * 60 ? "mid" : "low",
     };
     return withFluids(s, cfg, ev.indoor || type === "VirtualRide", avgW / ftp);
   }
   if (!durSec) { durSec = 60 * 60; base.assumed = true; }
   const min = durSec / 60;
-  if (type === "WeightTraining") return withFluids({ ...base, durSec, gym: true, kcal: 280 * min / 60, intra: 0, key: false, demand: "mid" }, cfg, true, 0.5);
-  if (RUNS.has(type)) { const hi = !!cfg.prio || (ifp || 0) >= 0.85; return withFluids({ ...base, durSec, run: true, prio: !!cfg.prio, kcal: 10 * min, intra: min > 75 ? Math.round(40 * min / 60) : 0, key: hi || min >= 100, high: hi, demand: hi ? "high" : "mid" }, cfg, false, ifp || 0.7); }
-  return withFluids({ ...base, durSec, kcal: 6 * min, intra: 0, key: false, demand: "low" }, cfg, false, 0.5);
+  if (type === "WeightTraining") return withFluids({ ...base, durSec, gym: true, kcal: K.GYM_KCAL_H * min / 60, intra: 0, key: false, demand: "mid" }, cfg, true, 0.5);
+  if (RUNS.has(type)) { const hi = !!cfg.prio || (ifp || 0) >= 0.85; return withFluids({ ...base, durSec, run: true, prio: !!cfg.prio, kcal: K.RUN_KCAL_MIN * min, intra: min > 75 ? Math.round(40 * min / 60) : 0, key: hi || min >= 100, high: hi, demand: hi ? "high" : "mid" }, cfg, false, ifp || 0.7); }
+  return withFluids({ ...base, durSec, kcal: K.OTHER_KCAL_MIN * min, intra: 0, key: false, demand: "low" }, cfg, false, 0.5);
 }
 
 // Płyny i sód w trakcie. Pot: ustawienie w L/h dla jazdy ok. 70% FTP na zewnątrz, korekta na intensywność i trenażer.
@@ -327,7 +343,7 @@ export function planDay(day, ctx) {
   const intra = act.reduce((a, s) => a + (s.intra || 0), 0);
   const maint = v.base + train;
   const P = v.prot * v.mass, F = v.fat * v.mass;
-  const minMain = v.minMeal || suggestMinMeal(v.base, ctx.times && ctx.times.length ? ctx.times.length : v.meals), minSnack = 150;
+  const minMain = v.minMeal || suggestMinMeal(v.base, ctx.times && ctx.times.length ? ctx.times.length : v.meals), minSnack = K.SNACK_MIN;
   const isTraining = m => ["pre", "presnack", "recovery"].includes(m.role);
   let meals = buildTimeline(act, { wake: v.wake, sleep: v.sleep, meals: v.meals, times: ctx.times }).map(m => ({ ...m }));
   let res = null;
@@ -403,16 +419,16 @@ export function planDay(day, ctx) {
       }
     }
     // Nawodnienie: ok. 35 ml/kg na dzień poza treningiem, przed treningiem 5–7 ml/kg (ACSM), po treningu 150% niedoboru.
-    const baseMl = 35 * v.mass;
+    const baseMl = K.FLUID_ML_KG * v.mass;
     meals.forEach(m => { m.ml = m.kind === "snack" ? 250 : 450; });
     meals.forEach(m => {
-      if (m.role === "pre") m.ml = Math.round(6 * v.mass / 50) * 50;
+      if (m.role === "pre") m.ml = Math.round(K.PRE_ML_KG * v.mass / 50) * 50;
       if (m.role === "presnack") m.ml = 250;
-      if (m.role === "recovery" && m.sess) m.ml = Math.round(Math.max(500, m.sess.deficitMl * 1.5) / 50) * 50;
+      if (m.role === "recovery" && m.sess) m.ml = Math.round(Math.max(500, m.sess.deficitMl * K.REHYDRATE) / 50) * 50;
     });
     const mealMl = meals.reduce((a, m) => a + m.ml, 0);
     const intraMl = act.reduce((a, s) => a + (s.fluid || 0), 0);
-    const betweenMl = Math.max(0, Math.round((baseMl + act.reduce((a, s) => a + (s.deficitMl || 0) * 1.5, 0) - mealMl) / 50) * 50);
+    const betweenMl = Math.max(0, Math.round((baseMl + act.reduce((a, s) => a + (s.deficitMl || 0) * K.REHYDRATE, 0) - mealMl) / 50) * 50);
     // Deficyt: tylko z posiłków LOW (z dala od treningu), od wieczoru. Żaden posiłek nie schodzi poniżej minimum.
     let def = 0;
     const want = ctx.deficit || 0;
@@ -439,7 +455,7 @@ export function planDay(day, ctx) {
 }
 
 // Ładowanie węglowodanami przed startem priorytetowym (Burke i in. 2011): g/kg dla dnia d, gdy start jest za 1 lub 2 dni.
-export function loadingFor(daysAhead, prioSessions) {
+export function loadingFor(daysAhead) {
   let kg = 0;
   for (const { offset, s } of daysAhead) {
     if (!s.prio) continue;
@@ -450,12 +466,111 @@ export function loadingFor(daysAhead, prioSessions) {
   return kg;
 }
 
-// Deficyt tygodnia rozłożony na dozwolone dni (wieczór przed jakością = zero).
-export function weekDeficits(days, s, mode) {
-  if (!s.cutOn || mode === "sick") return days.map(() => 0);
-  const cap = mode === "tired" ? Math.min(150, s.cap) : s.cap, weekly = mode === "tired" ? s.weekly / 2 : s.weekly;
-  const allowed = days.map(d => d.allowed);
-  const n = allowed.filter(Boolean).length;
-  const per = n ? Math.min(cap, weekly / n) : 0;
-  return allowed.map(a => a ? per : 0);
+// ---------- Wykonanie ----------
+// Wykonana aktywność z Intervals jako jednostka dnia. Energia z pracy (icu_joules), inaczej z kalorii urządzenia.
+// Zwraca null, gdy aktywność jest za krótka albo nie ma danych (np. skrót ze Stravy bez czasu).
+export function analyzeActivity(a, cfg) {
+  const durSec = +a.moving_time || +a.elapsed_time || 0;
+  if (durSec < K.MIN_ACT_SEC) return null;
+  const ftp = cfg.ftp || 250, h = durSec / 3600, type = a.type || "Other";
+  const t = (a.start_date_local || "").slice(11, 16);
+  const ifp = a.icu_intensity ? a.icu_intensity / 100 : null;
+  const ingested = +a.carbs_ingested > 0 ? Math.round(+a.carbs_ingested) : null;
+  const base = { id: "a" + a.id, actId: String(a.id), name: a.name || type, type, durSec, ifp, done: true, start: t ? parseHM(t) : null, prio: !!cfg.prio, race: false, assumed: false };
+  const isRide = RIDES.has(type) || type === "NordicSki" || type === "VirtualSki";
+  const kj = +a.icu_joules > 0 ? a.icu_joules / 1000 : isRide && +a.icu_average_watts > 0 ? a.icu_average_watts * durSec / 1000 : null;
+  const cal = +a.calories > 0 ? +a.calories : null;
+  let s;
+  if (isRide && kj) {
+    const avgW = Math.round(kj * 1000 / durSec), rel = avgW / ftp;
+    const np = +a.icu_weighted_avg_watts || avgW;
+    const high = !!cfg.prio || (ifp || np / ftp) >= 0.85 || kj >= 1800;
+    s = { ...base, ride: true, kj: Math.round(kj), avgW, cho: Math.round(kj * choFraction(Math.max(rel, np / ftp * 0.95)) / 4), kcal: kj - K.MAINT_KCAL_H * h,
+      long: durSec >= 150 * 60, high, key: high || durSec >= 150 * 60, demand: high || durSec >= 150 * 60 ? "high" : durSec >= 75 * 60 ? "mid" : "low" };
+    // Bez wpisu „carbs_ingested” przyjmujemy typową podaż ok. 40 g/h powyżej 75 min; trening z planu dostaje podaż z planu.
+    s.intra = ingested ?? (durSec > 75 * 60 ? Math.round(40 * h / 5) * 5 : 0); s.intraAssumed = ingested == null;
+    return withFluids(s, cfg, !!a.trainer || type === "VirtualRide", rel);
+  }
+  const min = durSec / 60;
+  if (type === "WeightTraining") s = { ...base, gym: true, kcal: cal ? cal - K.MAINT_KCAL_H * h : K.GYM_KCAL_H * h, key: false, demand: "mid" };
+  else if (RUNS.has(type)) { const hi = !!cfg.prio || (ifp || 0) >= 0.85; s = { ...base, run: true, kcal: cal ? cal - K.MAINT_KCAL_H * h : K.RUN_KCAL_MIN * min, key: hi || min >= 100, high: hi, demand: hi ? "high" : "mid" }; }
+  else if (isRide) s = { ...base, ride: true, kcal: cal ? cal - K.MAINT_KCAL_H * h : 0.6 * ftp * durSec / 1000 - K.MAINT_KCAL_H * h, key: false, demand: "low" };
+  else s = { ...base, kcal: cal ? cal - K.MAINT_KCAL_H * h : K.OTHER_KCAL_MIN * min, key: false, demand: "low" };
+  s.kcal = Math.max(0, s.kcal); s.intra = ingested ?? 0; s.intraAssumed = ingested == null;
+  return withFluids(s, cfg, s.gym || !!a.trainer, ifp || 0.6);
+}
+
+// Przeliczenie reszty dnia po wykonanym treningu (jak Hexis Live).
+// planned: plan dnia z planu treningów; actual: plan z wykonanymi aktywnościami; now: minuty od północy.
+// Posiłki, których pora minęła, zostają takie, jak były w planie (zakładamy, że zostały zjedzone).
+// Różnicę między celem dnia z wykonania a tym, co już zjedzone, przejmują posiłki od teraz.
+// Posiłek przed treningiem i regeneracja nie oddają węgli. Żaden posiłek nie schodzi poniżej minimum.
+export function liveAdjust(planned, actual, now, mass) {
+  const isTraining = m => ["pre", "presnack", "recovery"].includes(m.role);
+  const meals = actual.meals.map(m => ({ ...m }));
+  const used = new Set();
+  const twin = m => {
+    let best = null, bd = 1e9;
+    planned.meals.forEach((p, i) => { if (used.has(i)) return; const d = Math.abs(p.t - m.t) + (p.role === m.role ? 0 : 60); if (d < bd) { bd = d; best = i; } });
+    if (best == null || bd > 150) return null; used.add(best); return planned.meals[best];
+  };
+  const past = meals.filter(m => m.t <= now), future = meals.filter(m => m.t > now);
+  past.forEach(m => { const p = twin(m); m.past = true; if (p) Object.assign(m, { p: p.p, c: p.c, f: p.f, kcal: p.kcal, ml: p.ml, code: p.code, cut: p.cut }); });
+  const shownBefore = future.map(m => twin(m)); // ten sam posiłek w planie sprzed treningu: zmiana pokazywana względem niego
+  const sum = (list, k) => list.reduce((a, m) => a + m[k], 0);
+  const goal = { p: sum(actual.meals, "p"), c: sum(actual.meals, "c"), f: sum(actual.meals, "f") };
+  const minK = m => m.kind === "main" ? actual.minMain : K.SNACK_MIN;
+  const kc = m => 4 * m.p + 4 * m.c + 9 * m.f;
+  let left = 0;
+  if (future.length) {
+    const dP = goal.p - sum(past, "p") - sum(future, "p");
+    const pw = sum(future, "p") || 1; future.forEach(m => { m.p = Math.max(0, m.p + dP * m.p / pw); });
+    const move = (k, delta, floorG) => {
+      if (delta >= 0) { const w = sum(future, k) || 1; future.forEach(m => { m[k] += delta * (m[k] || 0.01) / w; }); return 0; }
+      let need = -delta;
+      for (let pass = 0; pass < 3 && need > 0.5; pass++) {
+        const donors = future.filter(m => !(k === "c" && isTraining(m)) && m[k] > floorG && kc(m) > minK(m) + 5);
+        const w = donors.reduce((a, m) => a + m[k], 0); if (!w) break;
+        let got = 0;
+        donors.forEach(m => { const per = k === "c" ? 4 : 9; const cap = Math.min(m[k] - floorG, (kc(m) - minK(m)) / per); const take = Math.max(0, Math.min(cap, need * m[k] / w)); m[k] -= take; got += take; });
+        need -= got; if (got < 0.5) break;
+      }
+      return need;
+    };
+    const leftC = move("c", goal.c - sum(past, "c") - sum(future, "c"), 15);
+    const leftF = move("f", goal.f - sum(past, "f") - sum(future, "f"), 6);
+    left = leftC * 4 + leftF * 9;
+    future.forEach((m, i) => {
+      m.kcal = kc(m); const o = shownBefore[i];
+      if (!o) { m.adj = { added: true, kcal: m.kcal, c: m.c }; return; }
+      const dk = m.kcal - o.kcal, dc = m.c - o.c;
+      m.adj = Math.abs(dk) >= 20 || Math.abs(dc) >= 5 ? { kcal: dk, c: dc } : null;
+    });
+  } else left = -(goal.p - sum(past, "p")) * 4 - (goal.c - sum(past, "c")) * 4 - (goal.f - sum(past, "f")) * 9;
+  const eaten = sum(past, "kcal");
+  const pT = sum(meals, "p"), fT = sum(meals, "f"), cT = sum(meals, "c") + actual.intra;
+  // Odchylenie: dodatnie = nie udało się zabrać (posiłki na minimum), ujemne = brakuje posiłków, by dojeść.
+  return {
+    ...actual, meals, pT, fT, cT, cKg: cT / mass,
+    live: { now, plannedTarget: planned.target, delta: actual.target - planned.target, eaten, remaining: sum(future, "kcal"), biggest: future.reduce((a, m) => !a || m.kcal > a.kcal ? m : a, null), noFuture: !future.length, unabsorbed: Math.round(left) },
+  };
+}
+
+// Kontrola wiarygodności wpisu z Dziennika: kcal zgodne z makro (4/4/9) i nie absurdalnie wysokie.
+export function dayCheck(w, expected) {
+  const out = [];
+  if (w.kcalConsumed && w.protein != null && w.carbohydrates != null && w.fatTotal != null) {
+    const m = 4 * w.protein + 4 * w.carbohydrates + 9 * w.fatTotal;
+    if (Math.abs(w.kcalConsumed - m) / w.kcalConsumed > 0.10) out.push(`kcal (${Math.round(w.kcalConsumed)}) nie zgadzają się z makro (${Math.round(m)})`);
+  }
+  if (w.kcalConsumed && expected && w.kcalConsumed > 1.8 * expected) out.push(`kcal ponad 1,8 raza wyższe od planu (${Math.round(expected)})`);
+  return out;
+}
+
+// Nachylenie trendu masy (kg/dzień) z regresji liniowej. points: [{day, w}], day w dniach.
+export function weightSlope(points) {
+  const n = points.length; if (n < 2) return 0;
+  const mx = points.reduce((a, p) => a + p.day, 0) / n, my = points.reduce((a, p) => a + p.w, 0) / n;
+  const sxy = points.reduce((a, p) => a + (p.day - mx) * (p.w - my), 0), sxx = points.reduce((a, p) => a + (p.day - mx) ** 2, 0);
+  return sxx ? sxy / sxx : 0;
 }
