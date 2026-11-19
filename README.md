@@ -26,6 +26,8 @@ Szczegóły i źródła: `index.html`, sekcja „Metoda i ograniczenia”. Szacu
 - `model.js`: obliczenia, bez DOM.
 - `sw.js`, `manifest.webmanifest`, `icons/`: PWA.
 - `tools/icons.mjs`: generator ikon (`node tools/icons.mjs`).
+- `tools/serve.mjs`: lokalny podgląd (`node tools/serve.mjs . 8765`).
+- `PROJECT.md`, `docs/`: cel, zasady, stan, decyzje i roadmapa.
 - `CNAME`: domena GitHub Pages.
 
 ## Wdrożenie
