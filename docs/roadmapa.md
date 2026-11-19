@@ -23,12 +23,12 @@ Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 4. ~~Kalibracja odejmuje trening z planu.~~ Zrobione: z wykonanych aktywności z 29 dni; bez nich z planu.
 5. ~~Ręczne podbijanie wersji w `sw.js`.~~ Zrobione: `tools/release.sh`.
 7. **Deficyt w dzień treningowy wynosi zwykle 0.** Posiłki LOW mają stałe 0,4 g/kg węgli i są dobijane do minimum posiłku, a deficyt bierze tylko z LOW i nie schodzi poniżej minimum. Efekt: deficyt działa praktycznie tylko w dni wolne. Opcje: brać deficyt także z tłuszczu posiłków MEDIUM albo liczyć minimum posiłku LOW niżej. Decyzja Tomasza. 30 min po decyzji.
-8. **Pola aktywności niesprawdzone na prawdziwym koncie.** Przeliczenie używa `icu_joules`, `calories`, `carbs_ingested`, `paired_event_id` z `/activities`. Aktywności ze Stravy przychodzą przez API bez danych i są pomijane. Sprawdzić przy teście E.
+8. **Pola aktywności niesprawdzone na prawdziwym koncie.** Przeliczenie używa `icu_joules`, `calories`, `carbs_ingested`, `paired_event_id` z `/activities`. Dopasowanie do planu wyłącznie po `paired_event_id`, więc sprawdzić, czy Intervals paruje treningi z Garmina/Wahoo automatycznie. Aktywności ze Stravy przychodzą przez API bez danych i są pomijane. Sprawdzić przy teście E.
 6. **Kopia ustawień nadpisuje całość** (wygrywa nowszy zapis). Zmiany na dwóch urządzeniach w krótkim odstępie mogą się zgubić. Przy jednym użytkowniku do przyjęcia. Scalanie per pole dopiero przy zawodnikach. 1 h.
 
 ## B. Porządek kodu
 
-1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 26 testów, `node --test`).
+1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 28 testów, `node --test`).
 2. ~~Podział `app.js`~~ Zrobione: `util`, `store`, `intervals`, `calc`, `log`, `settings`, `app`.
 3. ~~Stałe modelu w jednym miejscu~~ Zrobione: `K` w `model.js`. Krzywe udziału węglowodanów zostają przy funkcjach.
 4. **Wydatek siłowni i biegu stały** (280 kcal/h, 10 kcal/min) niezależnie od masy. Przeliczać przez masę ciała albo brać kJ/kcal z wykonanej aktywności. 30 min.

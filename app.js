@@ -120,7 +120,9 @@ function sessionCard(s, d, v) {
   const end = s.start + s.durSec / 60;
   const blocks = s.blocks && s.intra ? `<table class="fuel"><thead><tr><th>Odcinek</th><th>Węgle</th><th>Płyny</th><th>Mocno</th></tr></thead><tbody>${s.blocks.map(b => `<tr><td>${b.from}–${b.to}'</td><td>${b.intake ? `<b>${b.intake} g</b>` : "–"}</td><td>${b.ml} ml</td><td class="${b.hardMin ? "hard" : ""}">${b.hardMin ? b.hardMin + "'" : "–"}</td></tr>`).join("")}</tbody></table>` : "";
   const fsum = `<div class="fsum">${s.intra ? `<span>Węgle: <b>${s.intra} g</b> (${s.gph || r5(s.intra / (s.durSec / 3600))} g/h)</span>` : `<span>Węgle: <b>bez</b>${s.ride && s.durSec <= 65 * 60 ? " (do ok. 65 min wystarczy posiłek przed)" : ""}</span>`}<span class="water">Płyny: <b>${lfmt(s.fluid)}</b> (${s.mlh} ml/h)${s.bottles >= 0.5 ? ` · ${fmt(s.bottles, 1)} bidonu 750 ml` : ""}</span>${s.na ? `<span>Sód: <b>${s.na} mg/h</b></span>` : ""}</div>`;
-  const missed = d.missed.includes(s) ? `<div class="warnline">${s.missed ? "Brak wykonania w Intervals, trening nie wchodzi do bilansu dnia." : "Nie widzę tego treningu w Intervals. Plan przeliczy się po wgraniu aktywności. Jeśli go nie robisz, odznacz „robię”."}</div>` : "";
+  const twin = d.ss.find(x => x.unplanned && M.sportFamily(x.type) === M.sportFamily(s.type));
+  const unpaired = twin && !s.off ? `<div class="warnline">„${esc(twin.name)}” nie jest sparowany z tym treningiem w Intervals, więc liczę oba. Jeśli to ten trening, sparuj go w Intervals${s.missed ? "" : " albo odznacz „robię”"}.</div>` : "";
+  const missed = unpaired ? unpaired : d.missed.includes(s) ? `<div class="warnline">${s.missed ? "Brak wykonania w Intervals, trening nie wchodzi do bilansu dnia." : "Nie widzę tego treningu w Intervals. Plan przeliczy się po wgraniu aktywności. Jeśli go nie robisz, odznacz „robię”."}</div>` : "";
   return `<div class="sess ${s.off ? "off" : ""} ${s.prio ? "prio" : ""}">
     <div class="mh"><div><div class="sn">${esc(s.name)}</div><div class="meta">${sessMeta(s)}</div></div></div>
     ${missed}${profileSvg(s, v)}

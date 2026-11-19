@@ -154,3 +154,23 @@ test("trend masy: regresja liniowa", () => {
 // Znane ograniczenie (19.11.2026): w dzień treningowy posiłki LOW mają stałe 0,4 g/kg węgli i są dobijane do minimum
 // posiłku, więc deficyt (tylko z LOW, nie poniżej minimum) wynosi zwykle 0. Decyzja w roadmapie.
 test.todo("deficyt w dzień treningowy przy domyślnym minimum posiłku");
+
+test("dopasowanie aktywności: tylko paired_event_id z Intervals", () => {
+  const plan18 = [{ id: "10", type: "Ride", start: 18 * 60 }];
+  const a = (h, o = {}) => ({ id: 1, type: "Ride", start_date_local: `2026-11-19T${h}:00:00`, ...o });
+  assert.equal(M.matchActivity(a("08"), plan18), -1, "poranny dojazd bez parowania jest poza planem");
+  assert.equal(M.matchActivity(a("18"), plan18), -1, "nawet o tej samej porze bez parowania");
+  assert.equal(M.matchActivity(a("08", { paired_event_id: 10 }), plan18), 0, "sparowane w Intervals: zawsze");
+  assert.equal(M.matchActivity(a("18", { paired_event_id: 10 }), plan18, new Set([0])), -1, "trening już wykonany");
+});
+
+test("przeliczenie: posiłek, którego nie było w planie, a jego pora minęła, nie liczy się jako zjedzony", () => {
+  const ev = ride(30, [step(90, 70)]);
+  const planned = sess(ev, 18 * 60);
+  const extra = { ...M.analyzeActivity(act({ id: 31, start_date_local: "2026-11-19T08:00:00", moving_time: 3600, icu_joules: 600000 }), cfg), off: false };
+  const a = plan([planned]), b = plan([extra, planned]);
+  const L = M.liveAdjust(a, b, 17 * 60, V.mass);
+  const pastK = sum(L.meals.filter(m => m.past), "kcal"), pastA = sum(a.meals.filter(m => m.t <= 17 * 60), "kcal");
+  assert.ok(Math.abs(pastK - pastA) < 1, "minione = to, co było w planie");
+  assert.ok(sum(L.meals.filter(m => !m.past), "kcal") > sum(a.meals.filter(m => m.t > 17 * 60), "kcal"), "dodatkowa energia trafia do reszty dnia");
+});

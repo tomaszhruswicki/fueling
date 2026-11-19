@@ -500,6 +500,15 @@ export function analyzeActivity(a, cfg) {
   return withFluids(s, cfg, s.gym || !!a.trainer, ifp || 0.6);
 }
 
+// Dopasowanie wykonanej aktywności do treningu z planu: tylko po parowaniu w Intervals (paired_event_id).
+// Zwraca indeks w planned albo −1 (aktywność poza planem). Zgadywanie po rodzaju sportu i godzinie odrzucone:
+// poranny dojazd „wykonywał” wieczorny trening. Niesparowany trening z planu dostaje w widoku dnia podpowiedź.
+export const sportFamily = t => RIDES.has(t) || t === "NordicSki" || t === "VirtualSki" ? "ride" : /Run/.test(t || "") ? "run" : t === "WeightTraining" ? "gym" : "other";
+export function matchActivity(a, planned, taken = new Set()) {
+  if (a.paired_event_id == null) return -1;
+  return planned.findIndex((s, k) => !taken.has(k) && String(a.paired_event_id) === s.id);
+}
+
 // Przeliczenie reszty dnia po wykonanym treningu (jak Hexis Live).
 // planned: plan dnia z planu treningów; actual: plan z wykonanymi aktywnościami; now: minuty od północy.
 // Posiłki, których pora minęła, zostają takie, jak były w planie (zakładamy, że zostały zjedzone).
@@ -507,15 +516,18 @@ export function analyzeActivity(a, cfg) {
 // Posiłek przed treningiem i regeneracja nie oddają węgli. Żaden posiłek nie schodzi poniżej minimum.
 export function liveAdjust(planned, actual, now, mass) {
   const isTraining = m => ["pre", "presnack", "recovery"].includes(m.role);
-  const meals = actual.meals.map(m => ({ ...m }));
+  let meals = actual.meals.map(m => ({ ...m }));
   const used = new Set();
   const twin = m => {
     let best = null, bd = 1e9;
     planned.meals.forEach((p, i) => { if (used.has(i)) return; const d = Math.abs(p.t - m.t) + (p.role === m.role ? 0 : 60); if (d < bd) { bd = d; best = i; } });
     if (best == null || bd > 150) return null; used.add(best); return planned.meals[best];
   };
-  const past = meals.filter(m => m.t <= now), future = meals.filter(m => m.t > now);
-  past.forEach(m => { const p = twin(m); m.past = true; if (p) Object.assign(m, { p: p.p, c: p.c, f: p.f, kcal: p.kcal, ml: p.ml, code: p.code, cut: p.cut }); });
+  // Minione posiłki: wartości, nazwa i kod z planu, który był widoczny. Posiłek, którego w tamtym planie nie było
+  // (np. regeneracja po treningu poza planem), nie mógł zostać zjedzony, więc wypada, a jego energię przejmuje reszta dnia.
+  meals.filter(m => m.t <= now).forEach(m => { const p = twin(m); m.past = true; if (p) Object.assign(m, { p: p.p, c: p.c, f: p.f, kcal: p.kcal, ml: p.ml, code: p.code, cut: p.cut, name: p.name, role: p.role, kind: p.kind }); else m.gone = true; });
+  meals = meals.filter(m => !m.gone);
+  const past = meals.filter(m => m.past), future = meals.filter(m => !m.past);
   const shownBefore = future.map(m => twin(m)); // ten sam posiłek w planie sprzed treningu: zmiana pokazywana względem niego
   const sum = (list, k) => list.reduce((a, m) => a + m[k], 0);
   const goal = { p: sum(actual.meals, "p"), c: sum(actual.meals, "c"), f: sum(actual.meals, "f") };

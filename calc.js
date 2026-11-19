@@ -78,7 +78,6 @@ export function modeFor(d) {
 }
 
 // ---------- Treningi dnia ----------
-const family = t => M.RIDES.has(t) || t === "NordicSki" || t === "VirtualSki" ? "ride" : /Run/.test(t || "") ? "run" : t === "WeightTraining" ? "gym" : "other";
 const actsRaw = date => (S.cache.activities || []).filter(a => (a.start_date_local || "").slice(0, 10) === date);
 function actsOn(date, v) { return actsRaw(date).map(a => M.analyzeActivity(a, { ftp: v.ftp, sweat: v.sweat, sodium: v.sodium })).filter(Boolean); }
 
@@ -94,19 +93,16 @@ export function sessionsFor(date, v, withDone = false) {
     const s = M.analyzeSession(e, { ftp: v.ftp, zones: v.zones, sweat: v.sweat, sodium: v.sodium, prio });
     const evT = (e.start_date_local || "").slice(11, 16);
     let start = S.ov.time[e.id] ? M.parseHM(S.ov.time[e.id]) : evT && evT !== "00:00" ? M.parseHM(evT) : null;
+    const timed = start != null; // godzina z Intervals albo ustawiona ręcznie
     if (start == null) start = prevEnd == null ? def : prevEnd + 120;
     if (start + s.durSec / 60 > 23.5 * 60) start = Math.max(v.wake + 30, 23.5 * 60 - s.durSec / 60);
     prevEnd = start + s.durSec / 60;
-    return { ...s, start, off: !!S.ov.off[e.id], ev: e, desc: e.description || "", steps: M.stepSummary((e.workout_doc || {}).steps, v.ftp) };
+    return { ...s, start, timed, off: !!S.ov.off[e.id], ev: e, desc: e.description || "", steps: M.stepSummary((e.workout_doc || {}).steps, v.ftp) };
   });
   if (!withDone) return planned.sort((a, b) => a.start - b.start);
   const raw = actsRaw(date), out = planned.slice(), taken = new Set();
   raw.forEach(a => {
-    let i = planned.findIndex((s, k) => !taken.has(k) && a.paired_event_id != null && String(a.paired_event_id) === s.id);
-    const st = M.parseHM((a.start_date_local || "").slice(11, 16));
-    if (i < 0) { // najbliższy niewykonany trening tego samego rodzaju
-      let bd = 1e9; planned.forEach((s, k) => { if (taken.has(k) || family(s.type) !== family(a.type)) return; const d = Math.abs(s.start - st); if (d < bd) { bd = d; i = k; } });
-    }
+    const i = M.matchActivity(a, planned, taken);
     const p = i >= 0 ? planned[i] : null;
     const x = M.analyzeActivity(a, { ftp: v.ftp, sweat: v.sweat, sodium: v.sodium, prio: p ? p.prio : false });
     if (!x) return;
