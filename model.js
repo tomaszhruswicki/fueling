@@ -7,10 +7,12 @@ export const K = {
   HARD: 0.88,          // próg „mocno” (%FTP): minuty liczone do węgli przed treningiem i krótkiej podaży
   VO2: 1.05,           // próg VO2max (%FTP)
   MAINT_KCAL_H: 90,    // część wydatku na treningu już zawarta w utrzymaniu (kcal/h)
-  GYM_KCAL_H: 280,     // siłownia, stała (roadmapa B4: przeliczać przez masę)
+  GYM_MET: 5.0,        // siłownia bez historii: MET × masa × h (Compendium 2024, trening oporowy intensywny)
+  OTHER_MET: 5.0,      // inne aktywności: MET × masa × h
+  SWEAT_MIN_MIN: 45,   // test potu: min. 45 min jazdy lub biegu
+  INDOOR_SWEAT: 1.25,  // trenażer pocimy się mocniej niż na zewnątrz, gdy brak testów na trenażerze
   RUN_KCAL_KG_KM: 1.0, // bieg: koszt na km prawie niezależny od tempa (kcal/kg/km)
   RUN_KMH: 10,         // prędkość biegu, gdy brak dystansu w planie i biegów w historii
-  OTHER_KCAL_MIN: 6,   // inne aktywności
   FLUID_ML_KG: 35,     // płyny dzienne poza treningiem (ml/kg)
   PRE_ML_KG: 6,        // płyny w posiłku przed treningiem, ACSM 5–7 ml/kg
   REHYDRATE: 1.5,      // po treningu 150% niedoboru płynów (ACSM)
@@ -205,6 +207,10 @@ export function dayIntensity(act) {
   return "low";
 }
 
+// Wydatek netto (ponad utrzymanie) na godzinę siłowni i innych aktywności. cfg.gymKcalH: z historii (calc.js).
+export const gymKcalH = cfg => cfg.gymKcalH || Math.max(0, K.GYM_MET * (cfg.mass || 72) - K.MAINT_KCAL_H);
+export const otherKcalH = cfg => Math.max(0, K.OTHER_MET * (cfg.mass || 72) - K.MAINT_KCAL_H);
+
 // Analiza jednej jednostki z kalendarza.
 export function analyzeSession(ev, cfg) {
   const ftp = cfg.ftp || 250, zones = cfg.zones;
@@ -251,14 +257,17 @@ export function analyzeSession(ev, cfg) {
   }
   if (!durSec) { durSec = 60 * 60; base.assumed = true; }
   const min = durSec / 60;
-  if (type === "WeightTraining") return withFluids({ ...base, durSec, gym: true, kcal: K.GYM_KCAL_H * min / 60, intra: 0, key: false, demand: "mid" }, cfg, true, 0.5);
+  if (type === "WeightTraining") return withFluids({ ...base, durSec, gym: true, kcal: gymKcalH(cfg) * min / 60, intra: 0, key: false, demand: "mid" }, cfg, true, 0.5);
   if (RUNS.has(type)) { const hi = !!cfg.prio || (ifp || 0) >= 0.85; const km = runKm(ev, cfg, durSec); return withFluids({ ...base, durSec, run: true, prio: !!cfg.prio, km, kcal: Math.max(0, (cfg.mass || 72) * km * K.RUN_KCAL_KG_KM - K.MAINT_KCAL_H * durSec / 3600), intra: min > 75 ? Math.round(40 * min / 60) : 0, key: hi || min >= 100, high: hi, demand: hi ? "high" : "mid" }, cfg, false, ifp || 0.7); }
-  return withFluids({ ...base, durSec, kcal: K.OTHER_KCAL_MIN * min, intra: 0, key: false, demand: "low" }, cfg, false, 0.5);
+  return withFluids({ ...base, durSec, kcal: otherKcalH(cfg) * min / 60, intra: 0, key: false, demand: "low" }, cfg, false, 0.5);
 }
 
-// Płyny i sód w trakcie. Pot: ustawienie w L/h dla jazdy ok. 70% FTP na zewnątrz, korekta na intensywność i trenażer.
+// Płyny i sód w trakcie. Pot: L/h dla ok. 70% FTP (na zewnątrz cfg.sweat, na trenażerze cfg.sweatIn albo × 1,25),
+// korekta na intensywność. Wartości z testów potu (sweatProfile) albo z ustawień.
+export const sweatIntensity = rel => rel < 0.6 ? 0.8 : rel > 0.8 ? 1.15 : 1;
 export function withFluids(s, cfg, indoor, rel) {
-  const sweat = (cfg.sweat || 0.9) * (rel < 0.6 ? 0.8 : rel > 0.8 ? 1.15 : 1) * (indoor ? 1.25 : 1) * (s.gym ? 0.6 : 1);
+  const ref = indoor ? cfg.sweatIn || (cfg.sweat || 0.9) * K.INDOOR_SWEAT : cfg.sweat || 0.9;
+  const sweat = ref * sweatIntensity(rel) * (s.gym ? 0.6 : 1);
   const h = s.durSec / 3600;
   let mlh = Math.min(1000, sweat * 1000 * 0.75);
   if (s.durSec <= 60 * 60) mlh = Math.min(mlh, 600);
@@ -268,6 +277,29 @@ export function withFluids(s, cfg, indoor, rel) {
   const loss = Math.max(0, sweat * 1000 * h - fluid); // niedobór do uzupełnienia po treningu
   if (s.blocks) s.blocks.forEach(b => { b.ml = Math.round(mlh * (b.to - b.from) / 60 / 50) * 50; });
   return { ...s, mlh, fluid, na, sweatLoss: Math.round(sweat * 1000 * h), deficitMl: Math.round(loss / 50) * 50, bottles: Math.round(fluid / 750 * 2) / 2, indoor: !!indoor };
+}
+
+// ---------- Test potu ----------
+// Potliwość z ważenia przed i po (kg) i wypitych płynów (ml): (przed − po) + wypite, na godzinę.
+// norm: wynik sprowadzony do ok. 70% FTP (jak ustawienie), żeby testy o różnej intensywności dało się uśrednić.
+// Zwraca { rate, norm } albo { error }.
+export function sweatTest({ pre, post, ml, durSec, rel }) {
+  if (!(pre > 0 && post > 0)) return { error: "Wpisz wagę przed i po." };
+  if (!(durSec >= K.SWEAT_MIN_MIN * 60)) return { error: `Test wymaga min. ${K.SWEAT_MIN_MIN} min aktywności.` };
+  const h = durSec / 3600, rate = (pre - post + (ml || 0) / 1000) / h;
+  if (rate < 0.2 || rate > 3.5) return { error: `Wychodzi ${Math.round(rate * 100) / 100} l/h, poza zakresem 0,2–3,5. Sprawdź wagi i płyny.` };
+  return { rate: Math.round(rate * 100) / 100, norm: Math.round(rate / sweatIntensity(rel ?? 0.7) * 100) / 100 };
+}
+const median = xs => { const a = xs.slice().sort((x, y) => x - y), n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : null; };
+// Potliwość z testów: mediana osobno na zewnątrz i na trenażerze (ostatnie 6 każdego rodzaju).
+// Brak testów jednego rodzaju: przeliczenie z drugiego przez 1,25. Brak testów: null (zostaje ustawienie).
+export function sweatProfile(tests) {
+  const last = f => (tests || []).filter(f).sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 6).map(t => t.norm);
+  const o = last(t => !t.indoor), i = last(t => t.indoor);
+  if (!o.length && !i.length) return null;
+  const r2 = x => Math.round(x * 100) / 100;
+  const out = o.length ? median(o) : median(i) / K.INDOOR_SWEAT, inn = i.length ? median(i) : median(o) * K.INDOOR_SWEAT;
+  return { out: r2(out), in: r2(inn), nOut: o.length, nIn: i.length };
 }
 
 // Krótki zapis struktury treningu, np. "10' 170–200 W · 4×(8' 300–310 W / 2' 130 W)".
@@ -673,10 +705,10 @@ export function analyzeActivity(a, cfg) {
     return withFluids(s, cfg, !!a.trainer || type === "VirtualRide", rel);
   }
   const min = durSec / 60;
-  if (type === "WeightTraining") s = { ...base, gym: true, kcal: cal ? cal - K.MAINT_KCAL_H * h : K.GYM_KCAL_H * h, key: false, demand: "mid" };
+  if (type === "WeightTraining") s = { ...base, gym: true, kcal: cal ? cal - K.MAINT_KCAL_H * h : gymKcalH(cfg) * h, key: false, demand: "mid" };
   else if (RUNS.has(type)) { const hi = !!cfg.prio || (ifp || 0) >= 0.85; s = { ...base, run: true, kcal: cal ? cal - K.MAINT_KCAL_H * h : (cfg.mass || 72) * (+a.distance > 0 ? a.distance / 1000 : h * (cfg.runSpeed || K.RUN_KMH)) * K.RUN_KCAL_KG_KM - K.MAINT_KCAL_H * h, key: hi || min >= 100, high: hi, demand: hi ? "high" : "mid" }; }
   else if (isRide) s = { ...base, ride: true, kcal: cal ? cal - K.MAINT_KCAL_H * h : 0.6 * ftp * durSec / 1000 - K.MAINT_KCAL_H * h, key: false, demand: "low" };
-  else s = { ...base, kcal: cal ? cal - K.MAINT_KCAL_H * h : K.OTHER_KCAL_MIN * min, key: false, demand: "low" };
+  else s = { ...base, kcal: cal ? cal - K.MAINT_KCAL_H * h : otherKcalH(cfg) * h, key: false, demand: "low" };
   s.kcal = Math.max(0, s.kcal); s.intra = ingested ?? 0; s.intraAssumed = ingested == null;
   return withFluids(s, cfg, s.gym || !!a.trainer, ifp || 0.6);
 }

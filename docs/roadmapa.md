@@ -8,14 +8,16 @@ A1, A2, A3, A4, A5, A7, B1, B2, B3, B4 (bieg, spacery), C1. Szczegóły w `docs/
 
 ## Zrobione 20.11.2026
 
+Test potu (C3), wydatek siłowni z masy i historii (B4), karty posiłków bez rozjeżdżania na iPhonie. Przeliczenie po treningu potwierdzone na iPhonie z prawdziwą aktywnością (siłownia sparowana w Intervals).
+
 Suwak bilansu −600…+300 z punktami Mocny, Umiarkowany, Lekki, Rekompozycja, Utrzymanie, Budowa, Budowa+ (nadwyżka wokół siłowni, przekąska przed snem). Deficyt v2: jedzenie od dnia przy biurku, kroki według typu dnia, spacer od 90 min chroni posiłki, rozdział posiłków z kodów i równej reszty, łączenie małych posiłków. Szczegóły w `docs/decyzje.md`.
 
 ## Proponowana kolejność
 
-1. E: test na iPhonie z prawdziwym kluczem, w tym przeliczenie po treningu na prawdziwej aktywności (15 min).
+1. E: reszta listy z sekcji E (offline, ciemny motyw, synchronizacja kopii ustawień); przeliczenie po treningu działa.
 2. Obserwacja deficytu v2 przez 2 tygodnie: ile wchodzi realnie (dzień luźny z dwoma posiłkami do cięcia mieści ok. 440 z 500 kcal przez limit 30% posiłku).
-3. C3: test potu (1 h).
-4. C2: plan a wykonanie w widoku Tydzień (1 h).
+3. Pierwsze testy potu: min. 2 na zewnątrz i 2 na trenażerze.
+4. C2: plan a wykonanie w widoku Tydzień (1 h). Źródło kcal: wellness w Intervals z Dziennika; Fitatu nie ma publicznego API.
 5. Suwak automatycznie według trendu masy (docelowe tempo w kg/tydz., korekta co tydzień, min. 8 pomiarów wagi). Po obserwacji v2. 2 h.
 
 Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
@@ -36,7 +38,7 @@ Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 1. ~~Testy `model.js`~~ Zrobione (`test/model.test.mjs`, 47 testów, `node --test`).
 2. ~~Podział `app.js`~~ Zrobione: `util`, `store`, `intervals`, `calc`, `log`, `settings`, `app`.
 3. ~~Stałe modelu w jednym miejscu~~ Zrobione: `K` w `model.js`. Krzywe udziału węglowodanów zostają przy funkcjach.
-4. **Wydatek siłowni i biegu stały** (280 kcal/h, 10 kcal/min) niezależnie od masy. Przeliczać przez masę ciała albo brać kJ/kcal z wykonanej aktywności. 30 min.
+4. ~~Wydatek siłowni i biegu stały.~~ Zrobione 20.11: siłownia z kalorii urządzenia w ostatnich treningach (min. 2 z 29 dni), bez nich MET 5 × masa minus utrzymanie; inne aktywności MET 5 × masa. Bieg liczony z dystansu od 19.11.
 5. **Opis modelu tylko w `index.html`.** Przenieść do `docs/model.md`, w aplikacji zostawić skrót. 30 min.
 6. **Domyślny wiek 35 i płeć M**, gdy Intervals ich nie poda. Dla jednego użytkownika bez znaczenia, przy zawodnikach do onboardingu (D).
 
@@ -44,7 +46,7 @@ Reszta według potrzeby. Sekcja D dopiero po decyzji o zawodnikach.
 
 1. ~~Przeliczenie dnia po treningu (Hexis Live).~~ Zrobione. Dalszy krok: uwzględnić zjedzone z Dziennika zamiast założenia „minione posiłki zjedzone według planu”, gdy kcal z dziś są wpisane w trakcie dnia.
 2. **Plan a wykonanie w widoku Tydzień:** kcal i węgle z planu obok danych z Fitatu, z oznaczeniem wykonanych treningów. 1 h.
-3. **Test potu:** waga przed i po jeździe plus wypite płyny dają potliwość. Średnia z kilku testów, osobno trenażer i jazda na zewnątrz, zamiast stałych 0,9 l/h. 1 h.
+3. ~~Test potu.~~ Zrobione 20.11: w Ustawieniach, do jazdy lub biegu od 45 min z ostatnich 29 dni. Mediana z ostatnich 6 testów osobno na zewnątrz i na trenażerze, sprowadzona do 70% FTP. Bez temperatury: test w upale zawyży wynik zimą.
 4. **Ostrzeżenie o niskiej dostępności energii:** zjedzone minus wydatek treningowy na kg beztłuszczowej masy ciała poniżej ok. 30 kcal przez kilka dni z rzędu. Wymaga C1/A4 i % tkanki tłuszczowej. 1 h.
 5. **Trening jelita:** po jeździe jeden klik „tolerowane g/h”, a przed startem limit podaży rośnie stopniowo. 1,5 h.
 6. **Kofeina przy starcie priorytetowym:** ok. 3 mg/kg i pora względem startu. 30 min.

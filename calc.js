@@ -67,6 +67,15 @@ export function runSpeed() {
   return h > 0.3 ? km / h : null;
 }
 
+// Wydatek siłowni (kcal/h ponad utrzymanie) z wykonanych treningów z kaloriami z urządzenia, min. 2 z 29 dni.
+// Bez historii: MET × masa (model.js, gymKcalH).
+export function gymHistory() {
+  const g = (S.cache.activities || []).filter(a => a.type === "WeightTraining" && +a.calories > 0 && +a.moving_time >= 1200);
+  if (g.length < 2) return null;
+  const v = g.reduce((t, a) => t + (a.calories - M.K.MAINT_KCAL_H * a.moving_time / 3600) / (a.moving_time / 3600), 0) / g.length;
+  return Math.round(Math.max(120, Math.min(600, v)) / 10) * 10;
+}
+
 // ---------- Deficyt (spec 2026-11-20): limity w model.js (cutLimits, dayDeficit) ----------
 export const EA_MIN_KG_FFM = 30;
 
@@ -85,7 +94,7 @@ export function calibration(mass) {
   const key = (S.cache.fetchedAt || 0) + "|" + S.savedAt;
   if (calCache && calCache.key === key) return calCache.val;
   const from = addDays(todayISO(), -CAL_DAYS), wl = (S.cache.wellness || []).filter(x => x.id >= from && x.id < todayISO());
-  const v = { ftp: S.settings.ftp || (S.cache.athlete || {}).ftp || 250, zones: (S.cache.athlete || {}).zones, sweat: 0.9, sodium: 700, wake: 390 };
+  const v = { ftp: S.settings.ftp || (S.cache.athlete || {}).ftp || 250, zones: (S.cache.athlete || {}).zones, sweat: 0.9, sodium: 700, wake: 390, mass, gymKcalH: gymHistory() };
   const pre = S.settings.baseMode === "manual" && S.settings.base ? S.settings.base : null;
   const rows = wl.filter(x => x.kcalConsumed).map(x => { const train = trainKcalOn(x.id, v); return { x, train, bad: M.dayCheck(x, (pre || 30 * mass) + train) }; });
   const kc = rows.filter(r => !r.bad.length), skipped = rows.length - kc.length;
@@ -106,12 +115,12 @@ export const invalidateCal = () => { calCache = null; };
 export const calibrationInfo = () => { calibration(S.settings.mass || 75); return calCache.info; };
 
 export function eff() {
-  const a = S.cache.athlete || {}, s = S.settings, m = maintenance();
+  const a = S.cache.athlete || {}, s = S.settings, m = maintenance(), sweatP = M.sweatProfile(s.sweatTests);
   const ffm = s.bodyFat ? m.mass * (1 - s.bodyFat / 100) : 0.85 * m.mass; // bez pomiaru: 85% masy ciała
   const cutOn = !!s.cutOn && s.cutLow > 0, recomp = cutOn && !!s.recomp, gain = cutOn ? 0 : Math.max(0, Math.min(M.GAIN_MAX, +s.gain || 0));
   const prot = recomp ? Math.max(s.prot || 2, M.RECOMP_PROT) : gain ? Math.max(s.prot || 2, M.GAIN_MIN_PROT) : s.prot;
   return { ...s, cutOn, recomp, gain, prot, mass: m.mass, ftp: s.ftp || a.ftp || 250, zones: a.zones || [55, 75, 90, 105, 120, 150, 999], base: m.base, floor: m.floor, wake: M.parseHM(s.wake), sleep: M.parseHM(s.sleep),
-    runSpeed: runSpeed(), ffm, ffmMeasured: !!s.bodyFat, eaMin: r10(EA_MIN_KG_FFM * ffm), m };
+    runSpeed: runSpeed(), gymKcalH: gymHistory(), sweatP, sweat: sweatP ? sweatP.out : s.sweat, sweatIn: sweatP ? sweatP.in : null, ffm, ffmMeasured: !!s.bodyFat, eaMin: r10(EA_MIN_KG_FFM * ffm), m };
 }
 
 // ---------- Tryby z historią ----------
@@ -125,7 +134,7 @@ export function modeFor(d) {
 const actsAll = date => (S.cache.activities || []).filter(a => (a.start_date_local || "").slice(0, 10) === date);
 const actsRaw = date => actsAll(date).filter(a => !isWalk(a));
 export const walksOn = date => actsAll(date).filter(isWalk);
-const actCfg = (v, prio = false) => ({ ftp: v.ftp, sweat: v.sweat, sodium: v.sodium, mass: v.mass, runSpeed: v.runSpeed, prio });
+export const actCfg = (v, prio = false) => ({ ftp: v.ftp, zones: v.zones, sweat: v.sweat, sweatIn: v.sweatIn, sodium: v.sodium, mass: v.mass, runSpeed: v.runSpeed, gymKcalH: v.gymKcalH, prio });
 function actsOn(date, v) { return actsRaw(date).map(a => M.analyzeActivity(a, actCfg(v))).filter(Boolean); }
 
 // Treningi z planu. Gdy withDone, wykonane aktywności zastępują dopasowane treningi (paired_event_id albo ten sam
@@ -137,7 +146,7 @@ export function sessionsFor(date, v, withDone = false) {
   let prevEnd = null;
   const planned = evs.map(e => {
     const prio = S.ov.prio[e.id] != null ? !!S.ov.prio[e.id] : (e.category === "RACE_A" || e.category === "RACE_B");
-    const s = M.analyzeSession(e, { ftp: v.ftp, zones: v.zones, sweat: v.sweat, sodium: v.sodium, mass: v.mass, runSpeed: v.runSpeed, prio });
+    const s = M.analyzeSession(e, actCfg(v, prio));
     const evT = (e.start_date_local || "").slice(11, 16);
     let start = S.ov.time[e.id] ? M.parseHM(S.ov.time[e.id]) : evT && evT !== "00:00" ? M.parseHM(evT) : null;
     const timed = start != null; // godzina z Intervals albo ustawiona ręcznie

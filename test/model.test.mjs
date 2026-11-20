@@ -372,3 +372,34 @@ test("budowa: dzień po siłowni bez treningu, nadwyżka w dwóch pierwszych pos
   assert.ok(!b.meals.some(m => m.role === "bedtime"));
   assert.deepEqual(b.meals.map(m => !!m.gain), [true, true, false, false]);
 });
+
+test("B4: siłownia z masy (MET 5 minus utrzymanie), z historii gdy jest, wykonana z kalorii urządzenia", () => {
+  const gym = { id: "g", type: "WeightTraining", category: "WORKOUT", name: "Siłownia", moving_time: 3600 };
+  assert.equal(Math.round(M.analyzeSession(gym, { ...cfg, mass: 60 }).kcal), 5 * 60 - 90);
+  assert.equal(Math.round(M.analyzeSession(gym, { ...cfg, mass: 90 }).kcal), 5 * 90 - 90);
+  assert.equal(Math.round(M.analyzeSession(gym, { ...cfg, mass: 90, gymKcalH: 250 }).kcal), 250);
+  const act = { id: 1, type: "WeightTraining", moving_time: 3600, start_date_local: "2026-11-20T10:00:00" };
+  assert.equal(Math.round(M.analyzeActivity({ ...act, calories: 400 }, { ...cfg, mass: 80 }).kcal), 310);
+  assert.equal(Math.round(M.analyzeActivity(act, { ...cfg, mass: 80 }).kcal), 310);
+});
+
+test("C3: test potu liczy l/h i sprowadza do 70% FTP, odrzuca krótkie i nierealne", () => {
+  const t = M.sweatTest({ pre: 72.0, post: 71.0, ml: 500, durSec: 5400, rel: 0.7 });
+  assert.equal(t.rate, 1);
+  assert.equal(t.norm, 1);
+  assert.equal(M.sweatTest({ pre: 72, post: 71.2, ml: 0, durSec: 3600, rel: 0.85 }).norm, Math.round(0.8 / 1.15 * 100) / 100);
+  assert.ok(M.sweatTest({ pre: 72, post: 71, ml: 0, durSec: 1800, rel: 0.7 }).error);
+  assert.ok(M.sweatTest({ pre: 72, post: 68, ml: 0, durSec: 3600, rel: 0.7 }).error);
+});
+
+test("C3: profil potu z mediany, brakujący rodzaj z 1,25, trenażer używa własnej wartości", () => {
+  assert.equal(M.sweatProfile([]), null);
+  const p = M.sweatProfile([{ date: "2026-11-01", norm: 0.8 }, { date: "2026-11-05", norm: 1.0 }, { date: "2026-11-09", norm: 1.2 }]);
+  assert.equal(p.out, 1); assert.equal(p.in, 1.25); assert.equal(p.nIn, 0);
+  const q = M.sweatProfile([{ date: "2026-11-01", norm: 0.8 }, { date: "2026-11-02", norm: 1.5, indoor: true }]);
+  assert.equal(q.out, 0.8); assert.equal(q.in, 1.5);
+  const ev = ride(90, [step(90, 70)], { type: "VirtualRide" });
+  const a = M.analyzeSession(ev, { ...cfg, sweat: 0.8 }), b = M.analyzeSession(ev, { ...cfg, sweat: 0.8, sweatIn: 1.5 });
+  assert.equal(a.sweatLoss, Math.round(0.8 * 1.25 * 1.5 * 1000));
+  assert.equal(b.sweatLoss, Math.round(1.5 * 1.5 * 1000));
+});

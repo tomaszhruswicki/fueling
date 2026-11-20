@@ -36,7 +36,8 @@ GitHub Pages z gałęzi `main` (repo `tomaszhruswicki/fueling`, publiczne). DNS:
 
 - Działa: Dzień (timeline, posiłki z makro i płynami, trening z podażą w blokach 30 min, przeliczenie reszty dnia po wykonanym treningu), Tydzień, Dziennik (waga, kcal i makro do wellness, tylko zmienione pola, kontrola wiarygodności), Ustawienia (utrzymanie z jedną kalibracją z wykonania, posiłki i pory, deficyt, tryby z historią, priorytet), wysyłanie planu do Intervals.
 - Odświeżanie: przy otwarciu, po powrocie do aplikacji (po 2 min), co 5 min, a co 2 min, gdy dzisiejszy trening powinien się już skończyć, a aktywności jeszcze nie ma.
-- Sprawdzone lokalnie w widoku telefonu na danych syntetycznych. Na iPhonie z prawdziwym kluczem jeszcze nie, w tym pola aktywności z `/activities` (`icu_joules`, `carbs_ingested`, `paired_event_id`).
+- Sprawdzone na iPhonie z prawdziwym kluczem: przeliczenie po wykonanej siłowni sparowanej w Intervals (20.11). Reszta listy E (offline, ciemny motyw, synchronizacja kopii) do sprawdzenia.
+- Test potu w Ustawieniach i wydatek siłowni z historii (20.11).
 - Deficyt w rytmie treningu (A+), kroki dnia w utrzymaniu, bieg z dystansu (19.11 w nocy). Deficyt v2: jedzenie od dnia przy biurku, kroki według typu dnia, rozdział posiłków (20.11). Do obserwacji: ile deficytu realnie wchodzi (roadmapa A7).
 
 ## Dokumenty

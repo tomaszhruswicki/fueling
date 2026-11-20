@@ -2,7 +2,7 @@
 import * as M from "./model.js";
 import { S, DEF, MODES, hooks, getKey, setKey, changed, applyUserData, wipe } from "./store.js";
 import { api, errText, backupPayload } from "./intervals.js";
-import { maintenance, eff, autoTimes, tStr, calibrationInfo, computeRange, CAL_DAYS, CAL_MIN_KCAL, CAL_MIN_W } from "./calc.js";
+import { maintenance, eff, autoTimes, tStr, calibrationInfo, computeRange, actCfg, CAL_DAYS, CAL_MIN_KCAL, CAL_MIN_W } from "./calc.js";
 import { $, esc, fmt, kfmt, num, todayISO, dnum, DOWN, addDays, parseD } from "./util.js";
 
 const render = () => hooks.render();
@@ -65,7 +65,7 @@ const FIELDS = [
   ["age", "Wiek", "1", () => `z Intervals ${maintenance().age}`],
   ["bodyFat", "Tkanka tłuszczowa, %", "0.1", () => "opcjonalnie"],
   ["prot", "Białko, g/kg", "0.1"], ["fat", "Tłuszcz, g/kg", "0.1"],
-  ["sweat", "Pot, l/h przy 70% FTP", "0.1"], ["sodium", "Sód w pocie, mg/l", "50"], ["hpCarb", "HP: dodatkowe węgle, g/kg", "0.1"],
+  ["sweat", "Pot, l/h przy 70% FTP", "0.1", () => "bez testów potu"], ["sodium", "Sód w pocie, mg/l", "50"], ["hpCarb", "HP: dodatkowe węgle, g/kg", "0.1"],
 ];
 const MEAL_FIELDS = [
   ["meals", "Posiłki w dzień wolny", "1", () => "4"],
@@ -94,6 +94,7 @@ export function renderSettings() {
     fieldsDirty = false;
   }
   renderCut();
+  renderSweat();
   const v = eff();
   $("setNote").textContent = `Puste pola biorą wartości z Intervals albo domyślne. Teraz liczę z: masa ${fmt(v.mass)} kg, FTP ${v.ftp} W.`;
   renderMaint();
@@ -102,6 +103,43 @@ export function renderSettings() {
   $("modeHist").innerHTML = hist.length ? hist.map(e => `<div><span>${e.end ? "Koniec trybu" : MODES[e.mode]} · ${dnum(e.from)}${e.to && e.to !== e.from ? "–" + dnum(e.to) : e.to ? "" : " → do odwołania"}${e.cancelled ? " · anulowano" : ""}</span><button class="x" type="button" data-delmode="${e.id}" aria-label="Usuń wpis">×</button></div>`).join("") : `<p class="small muted">Brak wpisów. Tryb ustawiasz w widoku Dzień.</p>`;
   document.querySelectorAll("[data-delmode]").forEach(b => b.onclick = () => { S.modes = S.modes.filter(e => String(e.id) !== b.dataset.delmode); changed(); render(); });
   $("keyStatus").textContent = getKey() ? "Klucz zapisany na tym urządzeniu." : "Brak klucza.";
+}
+
+// ---------- Test potu (roadmapa C3) ----------
+// Testy w ustawieniach (kopia w Intervals). Aktywność z ostatnich 29 dni daje czas, intensywność i trenażer.
+const sweatActs = v => (S.cache.activities || [])
+  .filter(a => ["ride", "run"].includes(M.sportFamily(a.type)) && +a.moving_time >= M.K.SWEAT_MIN_MIN * 60)
+  .sort((a, b) => (b.start_date_local || "").localeCompare(a.start_date_local || "")).slice(0, 12)
+  .map(a => { const x = M.analyzeActivity(a, actCfg(v)); return x && { a, durSec: x.durSec, indoor: !!x.indoor, rel: x.rel || x.ifp || 0.7 }; }).filter(Boolean);
+const actLabel = a => `${dnum((a.start_date_local || "").slice(0, 10))} ${esc(a.name || a.type)} · ${Math.round(a.moving_time / 60)} min`;
+function renderSweat() {
+  const box = $("sweatBox"); if (!box) return;
+  if (box.contains(document.activeElement)) return;
+  const v = eff(), tests = S.settings.sweatTests || [], done = new Set(tests.map(t => t.actId));
+  const acts = sweatActs(v).filter(x => !done.has(String(x.a.id))), P = v.sweatP;
+  const sum = P ? `Liczę z testów: na zewnątrz <b>${fmt(P.out, 2)} l/h</b>${P.nOut ? ` (${P.nOut} ${P.nOut === 1 ? "test" : "testy"})` : " (z trenażera ÷ 1,25)"}, trenażer <b>${fmt(P.in, 2)} l/h</b>${P.nIn ? ` (${P.nIn} ${P.nIn === 1 ? "test" : "testy"})` : " (z zewnątrz × 1,25)"}, przy ok. 70% FTP. Pole „Pot” w Parametrach nie jest teraz używane.`
+    : `Bez testów liczę z ustawienia: ${fmt(S.settings.sweat || 0.9, 1)} l/h na zewnątrz, na trenażerze × 1,25.`;
+  box.innerHTML = `${acts.length ? `<div class="fields">
+      <label style="grid-column:1/-1">Aktywność<select id="swAct">${acts.map(x => `<option value="${x.a.id}">${actLabel(x.a)}${x.indoor ? " · trenażer" : ""}</option>`).join("")}</select></label>
+      <label>Waga przed, kg<input id="swPre" type="text" inputmode="decimal" placeholder="72,4"></label>
+      <label>Waga po, kg<input id="swPost" type="text" inputmode="decimal" placeholder="71,6"></label>
+      <label>Wypite w trakcie, ml<input id="swMl" type="text" inputmode="numeric" placeholder="750"></label>
+      <label class="end"><button type="button" class="btn primary" id="swSave">Zapisz test</button></label>
+    </div>` : `<p class="small muted">Brak jazdy lub biegu od ${M.K.SWEAT_MIN_MIN} min z ostatnich 29 dni bez testu. Test dodasz po wgraniu aktywności do Intervals.</p>`}
+    <p class="small" id="swStatus" aria-live="polite"></p>
+    ${tests.length ? `<div class="hist">${tests.slice().sort((a, b) => b.date.localeCompare(a.date)).map(t => `<div><span>${dnum(t.date)} ${esc(t.name)}${t.indoor ? " · trenażer" : ""}<br><span class="muted small">${fmt(t.rate, 2)} l/h (przy 70% FTP ${fmt(t.norm, 2)}) · −${fmt(t.pre - t.post, 1)} kg, wypite ${t.ml} ml</span></span><button class="x" type="button" data-delsw="${t.id}" aria-label="Usuń test">×</button></div>`).join("")}</div>` : ""}
+    <p class="small muted">${sum}</p>`;
+  const save = $("swSave");
+  if (save) save.onclick = () => {
+    const x = acts.find(y => String(y.a.id) === $("swAct").value); if (!x) return;
+    const pre = num($("swPre").value), post = num($("swPost").value), ml = num($("swMl").value) || 0;
+    const r = M.sweatTest({ pre, post, ml, durSec: x.durSec, rel: x.rel });
+    if (r.error) { $("swStatus").textContent = r.error; return; }
+    S.settings.sweatTests = [...tests, { id: Date.now(), actId: String(x.a.id), date: (x.a.start_date_local || "").slice(0, 10), name: x.a.name || x.a.type, indoor: x.indoor, durSec: x.durSec, rel: Math.round(x.rel * 100) / 100, pre, post, ml, rate: r.rate, norm: r.norm }];
+    document.activeElement.blur(); changed(); render();
+    $("swStatus").textContent = `Zapisano: ${fmt(r.rate, 2)} l/h.`;
+  };
+  box.querySelectorAll("[data-delsw]").forEach(b => b.onclick = () => { b.blur(); S.settings.sweatTests = tests.filter(t => String(t.id) !== b.dataset.delsw); changed(); render(); });
 }
 
 // ---------- Bilans: suwak −600 … +300 z punktami (spec 2026-11-20) ----------

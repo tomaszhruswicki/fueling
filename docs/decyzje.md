@@ -2,6 +2,12 @@
 
 Najnowsze na górze. Każda z datą i powodem, żeby nie otwierać ich ponownie bez nowego argumentu.
 
+## 20.11.2026: test potu i wydatek siłowni
+
+- **Test potu w Ustawieniach** (C3): wybór jazdy lub biegu od 45 min z ostatnich 29 dni, waga przed i po, wypite ml. Potliwość = (przed − po + wypite) / czas. Wynik sprowadzony do ok. 70% FTP tym samym mnożnikiem, którego model używa dla intensywności (0,8 / 1 / 1,15), żeby testy o różnej intensywności dało się uśrednić. Mediana z ostatnich 6 testów osobno na zewnątrz i na trenażerze; brak jednego rodzaju: przeliczenie z drugiego przez 1,25. Testy zastępują pole „Pot” w Parametrach. Wynik poza 0,2–3,5 l/h odrzucany. Temperatury nie uwzględniamy (wymagałaby zewnętrznego API, C9). Testy zapisują się w ustawieniach, więc też w kopii w Intervals.
+- **Wydatek siłowni** (B4): z kalorii urządzenia w treningach siłowych z 29 dni (min. 2, od 20 min, minus 90 kcal/h utrzymania, w granicach 120–600 kcal/h). Bez historii MET 5 × masa minus 90 kcal/h (72 kg: 270 kcal/h, blisko dawnych 280). Inne aktywności MET 5 × masa minus 90 kcal/h zamiast stałych 6 kcal/min. Bieg bez zmian (z dystansu od 19.11).
+- **Fitatu bez synchronizacji.** Fitatu nie ma publicznego API, a PWA nie czyta Apple Health. Kcal i makro zostają wpisywane w Dzienniku do wellness w Intervals; C2 weźmie je stamtąd.
+
 ## 20.11.2026: budowa (nadwyżka)
 
 - **Suwak bilansu od −600 do +300.** Prawa strona to nadwyżka w dzień z siłownią; punkty Budowa (+200) i Budowa+ (+300). Udziały: siłownia 100%, dzień po siłowni i mocny 50%, luźny i średni 25%, wolny 0. Powód: przyrost beztłuszczowej masy u wytrenowanych to ok. 0,25–0,5% masy na miesiąc, większa nadwyżka idzie w tłuszcz (Iraki i in. 2019, Garthe i in. 2013); synteza białek podwyższona do ok. 36 h po siłowni (MacDougall i in. 1995); u kolarza tłuszcz obniża W/kg.
